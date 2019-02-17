@@ -75,6 +75,7 @@ Sounds* loadSounds()
     sounds->checkpoint = Mix_LoadWAV("./data/sfx/checkpoint.wav");
     sounds->text = Mix_LoadWAV("./data/sfx/text.wav");
     sounds->invicible = Mix_LoadWAV("./data/sfx/invicible.wav");
+    sounds->complete = Mix_LoadWAV("./data/sfx/complete.wav");
 
     return sounds;
 }
@@ -90,7 +91,7 @@ Settings* loadSettings()
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fscanf(file, "Fullscreen=%d\n", &settings->fullscreen);
+    fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume);
 
     fclose(file);
 
@@ -105,7 +106,7 @@ void saveSettings(Settings *settings)
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "Fullscreen=%d\n", settings->fullscreen);
+    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", settings->fullscreen, settings->music_volume, settings->sfx_volume);
 
     fclose(file);
 }

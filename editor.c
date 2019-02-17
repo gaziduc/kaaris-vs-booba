@@ -3,7 +3,7 @@
 #include "game.h"
 #include "editor.h"
 
-void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts)
+void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings)
 {
     int escape = 0;
     int selected_tile = 1;
@@ -13,7 +13,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts)
     if(lvl == NULL)
         exit(EXIT_FAILURE);
 
-    loadLevel(renderer, 1, lvl, EDIT);
+    loadLevel(renderer, 1, lvl, EDIT, settings);
 
 
 
@@ -81,7 +81,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts)
             if(lvl->number + 1 <= NUM_LEVEL)
             {
                 freeLevel(lvl, EDIT);
-                loadLevel(renderer, lvl->number + 1, lvl, EDIT);
+                loadLevel(renderer, lvl->number + 1, lvl, EDIT, settings);
             }
         }
         if(in->key[SDL_SCANCODE_PAGEDOWN])
@@ -91,7 +91,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts)
             if(lvl->number - 1 > 0)
             {
                 freeLevel(lvl, EDIT);
-                loadLevel(renderer, lvl->number - 1, lvl, EDIT);
+                loadLevel(renderer, lvl->number - 1, lvl, EDIT, settings);
             }
         }
 

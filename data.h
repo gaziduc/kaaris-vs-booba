@@ -13,7 +13,6 @@
     {
         TTF_Font *ocraext_title;
         TTF_Font *ocraext_score;
-        TTF_Font *ocraext_selected;
         TTF_Font *ocraext_message;
         TTF_Font *ocraext_commands;
         TTF_Font *ocraext_editorHUD;
@@ -40,11 +39,14 @@
         Mix_Chunk *checkpoint;
         Mix_Chunk *text;
         Mix_Chunk *invicible;
+        Mix_Chunk *complete;
     } Sounds;
 
     typedef struct
     {
         int fullscreen;
+        int music_volume;
+        int sfx_volume;
     } Settings;
 
     Fonts* loadFonts();

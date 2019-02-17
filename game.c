@@ -11,7 +11,7 @@
 #include "text.h"
 #include "list.h"
 
-void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode)
+void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Settings *settings)
 {
     char lvl_name[100] = "";
     char sky_filename[100] = "";
@@ -108,6 +108,8 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode)
     lvl->weather->sfx = Mix_LoadWAV(filename);
     if(lvl->weather->sfx == NULL)
         exit(EXIT_FAILURE);
+
+    Mix_VolumeChunk(lvl->weather->sfx, settings->sfx_volume);
 
     lvl->weather->pos = malloc(lvl->weather->num_elm * sizeof(SDL_Rect));
     if(lvl->weather->pos == NULL)
@@ -339,7 +341,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 }
 
 
-void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds)
+void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings)
 {
     intro(renderer, in, pictures, fonts, sounds);
 
@@ -347,7 +349,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
     if(lvl == NULL)
         exit(EXIT_FAILURE);
 
-    loadLevel(renderer, 1, lvl, PLAY);
+    loadLevel(renderer, 1, lvl, PLAY, settings);
     unsigned long time1 = 0, time2 = 0, frame_num = 0;
     int escape = 0, finished = 0;
     Player *player = malloc(sizeof(Player));
@@ -432,10 +434,13 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
         }
 
 
-        SDL_RenderClear(renderer);
+
         updateMovingPlat(lvl, player);
         if(!player->dead)
-            mapCollisionPlayer(renderer, lvl, player, sounds, in, pictures, fonts);
+            mapCollisionPlayer(renderer, lvl, player, sounds, in, pictures, fonts, settings);
+
+        SDL_RenderClear(renderer); // put this line after mapCollisionPlayer(...), because of the animation of the end of a level.
+
         centerScrollingOnPlayer(lvl, player);
         SDL_RenderCopy(renderer, lvl->sky, NULL, NULL);
         displayWeather(renderer, player, lvl->weather, frame_num);
@@ -1058,7 +1063,7 @@ void centerScrollingOnPlayer(Lvl *lvl, Player *player)
  }
 
 
-void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts)
+void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings)
 {
     player->dirXmem = player->dirX;
     player->wasOnGround = player->on_ground;
@@ -1447,8 +1452,16 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
 
         if(lvl_num <= NUM_LEVEL)
         {
+            SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, WINDOW_W, WINDOW_H, 32, SDL_PIXELFORMAT_ABGR8888);
+            SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ABGR8888, surface->pixels, surface->pitch);
+            SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+            SDL_FreeSurface(surface);
+
+            levelFinished(renderer, sounds, fonts, texture);
+            SDL_DestroyTexture(texture);
+
             freeLevel(lvl, PLAY);
-            loadLevel(renderer, lvl_num, lvl, PLAY);
+            loadLevel(renderer, lvl_num, lvl, PLAY, settings);
             displayLevelName(renderer, pictures, fonts, lvl, in);
             player->isCheckpointActive = 0;
             respawn(player);
@@ -2002,6 +2015,7 @@ int checkSlope(Lvl *lvl, Player *player)
         player->pos.y -= player->pos.h;
         player->dirY = 0;
         player->on_ground = 1;
+        player->can_jump = 1;
 
         // On n'oublie pas de remettre wasOnSlope à 0 si nécéssaire
         if (resetWasOnSlope)

@@ -119,16 +119,16 @@
     } Player;
 
 
-    void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode);
+    void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Settings *settings);
     void freeLevel(Lvl *lvl, int mode);
     void freePlayer(Player *player);
     void respawn(Player *player);
     void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, unsigned long frame_num, int mode);
     void displayHUD(SDL_Renderer *renderer, Player *player, Pictures *pictures, Fonts *fonts, int level_num);
     void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Pictures *pictures);
-    void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds);
+    void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings);
     void wait(unsigned long *time1, unsigned long *time2, int delay);
-    void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts);
+    void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings);
     void mapCollisionMonster(Lvl *lvl, Player *player, MonsterList *currentMonster, int monsterIndex);
     void centerScrollingOnPlayer(Lvl *lvl, Player *player);
     void gameOver(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in);

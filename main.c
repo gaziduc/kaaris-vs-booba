@@ -1,21 +1,15 @@
 #include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
-#include <windows.h>
 #include "event.h"
 #include "game.h"
 #include "video.h"
 #include "key.h"
 #include "transition.h"
 #include "editor.h"
+#include "option.h"
 
-#define TITLE           0
-#define PLAY            1
-#define COMMANDS        2
-#define FULL_SCREEN     3
-#define SCORES          4
-#define QUIT            5
-#define NUM_TEXT        6
+enum {TITLE, PLAY_GAME, COMMANDS, OPTIONS, SCORES, QUIT, NUM_TEXT};
 
 #define LOADING_W       WINDOW_W / 2
 #define LOADING_H       WINDOW_H / 2
@@ -39,12 +33,12 @@ int main(int argc, char *argv[])
     SDL_Rect pos_dst[NUM_TEXT];
     SDL_Texture *texture[NUM_TEXT];
     SDL_Color white = {255, 255, 255};
-    int selected = PLAY;
+    int selected = PLAY_GAME;
 
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
     {
-        MessageBox(NULL, SDL_GetError(), "Could not initialize SDL2", MB_OK | MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2", SDL_GetError(), NULL);
         exit(EXIT_FAILURE);
     }
 
@@ -52,7 +46,7 @@ int main(int argc, char *argv[])
     window = SDL_CreateWindow("Kaaris vs Booba", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, LOADING_W, LOADING_H, SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS);
     if(window == NULL)
     {
-        MessageBox(NULL, SDL_GetError(), "Could not create window", MB_OK | MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not create window", SDL_GetError(), NULL);
         exit(EXIT_FAILURE);
     }
 
@@ -78,29 +72,25 @@ int main(int argc, char *argv[])
     initted = IMG_Init(img_flags);
     if((initted & img_flags) != img_flags)
     {
-        MessageBox(NULL, IMG_GetError(), "Could not initialize SDL2_image", MB_OK | MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2_image", IMG_GetError(), window);
         exit(EXIT_FAILURE);
     }
 
     if(TTF_Init() == -1)
     {
-        MessageBox(NULL, TTF_GetError(), "Could not initialize SDL2_ttf", MB_OK | MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2_ttf", TTF_GetError(), window);
         exit(EXIT_FAILURE);
     }
 
     initted = Mix_Init(mix_flags);
     if((initted & mix_flags) != mix_flags)
     {
-        MessageBox(NULL, Mix_GetError(), "Could not initialize SDL2_mixer", MB_OK | MB_ICONERROR);
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2_mixer", Mix_GetError(), window);
         exit(EXIT_FAILURE);
     }
 
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
     Mix_AllocateChannels(16); // 16 to be sure that all sfx will be heard (multiple coins, ...)
-    Mix_Chunk *sound = Mix_LoadWAV("./data/sfx/oh_clique.wav");
-    Mix_PlayChannel(-1, sound, 0);
-
-    SDL_ShowCursor(SDL_DISABLE);
 
     in = malloc(sizeof(Input));
     if(in == NULL)
@@ -112,6 +102,14 @@ int main(int argc, char *argv[])
     sounds = loadSounds();
     settings = loadSettings();
 
+    Mix_VolumeMusic(settings->music_volume);
+    setSfxVolume(sounds, settings->sfx_volume);
+
+    Mix_Chunk *sound = Mix_LoadWAV("./data/sfx/oh_clique.wav");
+    Mix_VolumeChunk(sound, settings->sfx_volume);
+    Mix_PlayChannel(-1, sound, 0);
+
+    SDL_ShowCursor(SDL_DISABLE);
     SDL_SetWindowSize(window, WINDOW_W, WINDOW_H);
     SDL_SetWindowBordered(window, SDL_TRUE);
     SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
@@ -127,9 +125,9 @@ int main(int argc, char *argv[])
 
 
     texture[TITLE] = RenderTextBlended(renderer, fonts->ocraext_title, "Kaaris vs Booba", white);
-    texture[PLAY] = RenderTextBlended(renderer, fonts->ocraext_message, "Jouer", white);
+    texture[PLAY_GAME] = RenderTextBlended(renderer, fonts->ocraext_message, "Jouer", white);
     texture[COMMANDS] = RenderTextBlended(renderer, fonts->ocraext_message, "Commandes", white);
-    texture[FULL_SCREEN] = RenderTextBlended(renderer, fonts->ocraext_message, "Plein écran", white);
+    texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
     texture[SCORES] = RenderTextBlended(renderer, fonts->ocraext_message, "Scores", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
@@ -149,7 +147,6 @@ int main(int argc, char *argv[])
 
     transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 1);
 
-
     while(!escape)
     {
         updateEvents(in);
@@ -162,7 +159,7 @@ int main(int argc, char *argv[])
             in->controller.hat[0] = SDL_HAT_CENTERED;
             in->controller.axes[1] = 0;
 
-            if(selected > PLAY)
+            if(selected > PLAY_GAME)
                 selected--;
         }
         if(KEY_DOWN_MENU)
@@ -181,12 +178,12 @@ int main(int argc, char *argv[])
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
             in->controller.buttons[0] = 0;
 
-            if(selected == PLAY)
+            if(selected == PLAY_GAME)
             {
                 transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
                 Mix_HaltMusic();
                 Mix_FreeMusic(music);
-                playGame(renderer, in, pictures, fonts, sounds);
+                playGame(renderer, in, pictures, fonts, sounds, settings);
                 music = Mix_LoadMUS("./data/music/menu.mp3");
                 Mix_PlayMusic(music, -1);
                 transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
@@ -198,20 +195,12 @@ int main(int argc, char *argv[])
                 displayKeys(renderer, fonts, pictures, in);
                 transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
             }
-            else if(selected == FULL_SCREEN)
+            else if(selected == OPTIONS)
             {
-                if(SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN)
-                {
-                    settings->fullscreen = 0;
-                    SDL_SetWindowFullscreen(window, 0);
-                }
-                else
-                {
-                    settings->fullscreen = 1;
-                    SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
-                }
+                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
+                displayOptions(renderer, window, pictures, fonts, sounds, settings, in);
+                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
 
-                saveSettings(settings);
             }
             else if(selected == SCORES)
             {
@@ -226,7 +215,7 @@ int main(int argc, char *argv[])
                 escape = 1;
         }
         if(in->key[SDL_SCANCODE_F8])
-            editor(renderer, in, pictures, fonts);
+            editor(renderer, in, pictures, fonts, settings);
 
 
         SDL_RenderClear(renderer);
