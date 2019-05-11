@@ -39,24 +39,54 @@ void updateEvents(Input* in)
                 in->wheelY = event.wheel.y;
                 break;
             case SDL_JOYDEVICEADDED:
-                if(event.jdevice.which == 0)
-                    initController(in);
+                if(in->num_controller < 2)
+                {
+                    freeController(in, in->num_controller);
+                    in->num_controller++;
+                    initController(in, in->num_controller);
+                }
                 break;
             case SDL_JOYBUTTONDOWN:
-                in->controller.buttons[event.jbutton.button] = 1;
+                for(int i = 0; i < in->num_controller; i++)
+                    if(in->controller_num[i] == event.jdevice.which)
+                        in->controller[i].buttons[event.jbutton.button] = 1;
                 break;
             case SDL_JOYBUTTONUP:
-                in->controller.buttons[event.jbutton.button] = 0;
+                for(int i = 0; i < in->num_controller; i++)
+                    if(in->controller_num[i] == event.jdevice.which)
+                        in->controller[i].buttons[event.jbutton.button] = 0;
                 break;
             case SDL_JOYAXISMOTION:
-                in->controller.axes[event.jaxis.axis] = event.jaxis.value;
+                for(int i = 0; i < in->num_controller; i++)
+                    if(in->controller_num[i] == event.jdevice.which)
+                    {
+                        in->controller[i].axes[event.jaxis.axis] = event.jaxis.value;
+
+                        if(in->controller[i].was_axes_centered[event.jaxis.axis] && (in->controller[i].axes[event.jaxis.axis] < -DEAD_ZONE || in->controller[i].axes[event.jaxis.axis] > DEAD_ZONE))
+                            in->controller[i].was_axes_centered[event.jaxis.axis] = 0;
+                        else if(in->controller[i].axes[event.jaxis.axis] < -DEAD_ZONE || in->controller[i].axes[event.jaxis.axis] > DEAD_ZONE)
+                            in->controller[i].is_axes_centered[event.jaxis.axis] = 0;
+                        else
+                        {
+                            in->controller[i].is_axes_centered[event.jaxis.axis] = 1;
+                            in->controller[i].was_axes_centered[event.jaxis.axis] = 1;
+                        }
+                    }
                 break;
             case SDL_JOYHATMOTION:
-                in->controller.hat[event.jhat.hat] = event.jhat.value;
+                for(int i = 0; i < in->num_controller; i++)
+                    if(in->controller_num[i] == event.jdevice.which)
+                        in->controller[i].hat[event.jhat.hat] = event.jhat.value;
                 break;
             case SDL_JOYDEVICEREMOVED:
-                if(event.jdevice.which == 0)
-                    freeController(in);
+                for(int i = 0; i < in->num_controller; i++)
+                    if(in->controller_num[i] == event.jdevice.which)
+                    {
+                        freeController(in, in->num_controller);
+                        in->num_controller--;
+                        initController(in, in->num_controller);
+                    }
+
                 break;
             default:
                 break;
@@ -65,32 +95,61 @@ void updateEvents(Input* in)
 }
 
 
-
-
-void initController(Input *in)
+int getKey()
 {
-    in->controller.joystick = SDL_JoystickOpen(0);
+    SDL_Event event;
+    int escape = 0;
+    int key;
 
-    if(in->controller.joystick != NULL)
+    while(SDL_PollEvent(&event) || !escape)
+	{
+	    switch(event.type)
+	    {
+	        case SDL_KEYDOWN:
+                key = event.key.keysym.scancode;
+                escape = 1;
+                break;
+	    }
+	}
+
+	return key;
+}
+
+
+
+
+void initController(Input *in, int num_controller)
+{
+    for(int i = 0; i < num_controller; i++)
     {
-        in->controller.haptic = SDL_HapticOpenFromJoystick(in->controller.joystick);
+        in->controller[i].joystick = SDL_JoystickOpen(i);
 
-        if(in->controller.haptic != NULL)
-            SDL_HapticRumbleInit(in->controller.haptic);
+        if(in->controller[i].joystick != NULL)
+        {
+            in->controller_num[i] = SDL_JoystickInstanceID(in->controller[i].joystick);
+
+            in->controller[i].haptic = SDL_HapticOpenFromJoystick(in->controller[i].joystick);
+
+            if(in->controller[i].haptic != NULL)
+                SDL_HapticRumbleInit(in->controller[i].haptic);
+        }
     }
 }
 
 
 
-void freeController(Input *in)
+void freeController(Input *in, int num_controller)
 {
-    if(in->controller.haptic != NULL)
+    for(int i = 0; i < num_controller; i++)
     {
-        SDL_HapticClose(in->controller.haptic);
-        in->controller.haptic = NULL;
-    }
+        if(in->controller[i].haptic != NULL)
+        {
+            SDL_HapticClose(in->controller[i].haptic);
+            in->controller[i].haptic = NULL;
+        }
 
-    SDL_JoystickClose(in->controller.joystick);
-    in->controller.joystick = NULL;
+        SDL_JoystickClose(in->controller[i].joystick);
+        in->controller[i].joystick = NULL;
+    }
 }
 

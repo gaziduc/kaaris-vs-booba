@@ -4,7 +4,14 @@
     typedef struct MonsterList MonsterList;
     struct MonsterList
     {
-        Monster monster;
+        SDL_Rect pos;
+        int direction;
+        int on_ground;
+        float dirX, dirY;
+        int saveX, saveY;
+        int frame_explosion;
+        int lifes;
+
         MonsterList *next;
     };
 

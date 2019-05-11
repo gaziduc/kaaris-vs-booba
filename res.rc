@@ -1,1 +1,28 @@
 1 ICON "icon.ico"
+
+#include <windows.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     0,29,0,0
+PRODUCTVERSION  0,29,0,0
+FILETYPE        VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",      "David Ghiassi"
+            VALUE "FileDescription",  "Kaaris vs Booba"
+            VALUE "FileVersion",      "0.29.0"
+            VALUE "InternalName",     "Kaaris vs Booba"
+            VALUE "OriginalFilename", "Kaaris vs Booba.exe"
+            VALUE "ProductName",      "Kaaris vs Booba"
+            VALUE "ProductVersion",   "0.29.0"
+        END
+    END
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x40C, 1252
+    END
+END

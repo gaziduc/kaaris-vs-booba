@@ -8,6 +8,7 @@
 
     #define NUM_SCORES      10
     #define NAME_LEN        11
+    #define NUM_TIMES       (5 * NUM_LEVEL)
 
     typedef struct
     {
@@ -22,6 +23,7 @@
     {
         SDL_Texture *HUDlife;
         SDL_Texture *HUDcoin;
+        SDL_Texture *HUDtimer;
         SDL_Texture *gameover;
         SDL_Texture *title;
         SDL_Texture *explosion;
@@ -44,10 +46,19 @@
 
     typedef struct
     {
+        int left;
+        int right;
+        int jump;
+    } Controls;
+
+    typedef struct
+    {
         int fullscreen;
         int music_volume;
         int sfx_volume;
+        Controls *controls;
     } Settings;
+
 
     Fonts* loadFonts();
     SDL_Texture* RenderTextBlended(SDL_Renderer *renderer, TTF_Font *font, char *str, SDL_Color fg);
@@ -55,10 +66,15 @@
     Pictures* loadPictures(SDL_Renderer *renderer);
     Sounds* loadSounds();
     Settings* loadSettings();
+    Controls* loadControls();
     void saveSettings(Settings *settings);
+    void saveControls(Controls *controls);
     void loadScores(unsigned long scores[], char names[][NAME_LEN]);
     void saveScores(unsigned long scores[], char names[][NAME_LEN]);
     void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN]);
     void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[]);
+    void loadTimes(unsigned long times[]);
+    void saveTimes(unsigned long times[]);
+    void updateTimes(const int level_num, const unsigned long player_time);
 
 #endif // DATA_H

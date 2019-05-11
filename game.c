@@ -2,14 +2,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_thread.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_mixer.h>
+#include <SDL2/SDL2_gfxPrimitives.h>
 #include "event.h"
 #include "game.h"
 #include "transition.h"
 #include "data.h"
 #include "text.h"
 #include "list.h"
+#include "file.h"
+
+
+Packet other_packet;
+int receive;
+
 
 void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Settings *settings)
 {
@@ -38,7 +46,7 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
     int size = strlen("name=");
     memset(lvl->name, '\0', sizeof(lvl->name));
-    for(int i = size; lvl_name[i] != '\n'; i++)
+    for(int i = size; lvl_name[i] != '\r' && lvl_name[i] != '\n'; i++)
         lvl->name[i - size] = lvl_name[i];
 
     fscanf(file, "width=%d\nheight=%d\nsky=%s\ntileset=%s\ncolision=%s\nmusic=%s\nweather=%s\nweather_num_elm=%d\nweather_dir_x=[%d,%d]\nweather_dir_y=[%d,%d]\nweather_sfx=%s\n", &lvl->width, &lvl->height, sky_filename, tileset_filename, solid_filename, music_filename, weather_filename, &lvl->weather->num_elm, &lvl->weather->dirXmin, &lvl->weather->dirXmax, &lvl->weather->dirYmin, &lvl->weather->dirYmax, weather_sfx_filename);
@@ -80,8 +88,12 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
     fclose(file);
 
-    lvl->startX = 0;
-    lvl->startY = 0;
+    for(int i = 0; i < 2; i++)
+    {
+        lvl->startX[i] = 0;
+        lvl->startY[i] = 0;
+    }
+
     lvl->maxX = lvl->width * TILE_SIZE;
     lvl->maxY = lvl->height * TILE_SIZE;
 
@@ -111,8 +123,8 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
     Mix_VolumeChunk(lvl->weather->sfx, settings->sfx_volume);
 
-    lvl->weather->pos = malloc(lvl->weather->num_elm * sizeof(SDL_Rect));
-    if(lvl->weather->pos == NULL)
+    lvl->weather->pos_dst = malloc(lvl->weather->num_elm * sizeof(SDL_Rect));
+    if(lvl->weather->pos_dst == NULL)
         exit(EXIT_FAILURE);
 
     lvl->weather->dirX = malloc(lvl->weather->num_elm * sizeof(int));
@@ -123,10 +135,18 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
     if(lvl->weather->dirY == NULL)
         exit(EXIT_FAILURE);
 
+    lvl->weather->scale = malloc(lvl->weather->num_elm * sizeof(float));
+    if(lvl->weather->scale == NULL)
+        exit(EXIT_FAILURE);
+
     lvl->num_moving_plat = 0;
+
 
     if(mode == PLAY)
     {
+        lvl->monsterList = malloc(sizeof(MonsterList));
+        initMonsterList(lvl->monsterList);
+
         sprintf(filename, "./data/music/%s", music_filename);
         lvl->music = Mix_LoadMUS(filename);
         if(lvl->music == NULL)
@@ -144,12 +164,21 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
 void setWeatherElement(Weather *weather, int elm_num, int is_initted)
 {
-    weather->pos[elm_num].x = rand() % (int) WINDOW_W;
+    weather->pos_dst[elm_num].x = rand() % (int) WINDOW_W;
     if(is_initted)
-        weather->pos[elm_num].y = 0;
+        weather->pos_dst[elm_num].y = 0;
     else
-        weather->pos[elm_num].y = rand() % (int) WINDOW_H;
-    SDL_QueryTexture(weather->texture, NULL, NULL, &weather->pos[elm_num].w, &weather->pos[elm_num].h);
+        weather->pos_dst[elm_num].y = rand() % (int) WINDOW_H;
+    SDL_QueryTexture(weather->texture, NULL, NULL, &weather->pos_dst[elm_num].w, &weather->pos_dst[elm_num].h);
+
+    weather->scale[elm_num] = (float) rand() / RAND_MAX;
+
+    weather->pos_dst[elm_num].w *= weather->scale[elm_num];
+    if(weather->pos_dst[elm_num].w <= 0)
+        weather->pos_dst[elm_num].w = 1;
+    weather->pos_dst[elm_num].h *= weather->scale[elm_num];
+    if(weather->pos_dst[elm_num].h <= 0)
+        weather->pos_dst[elm_num].h = 1;
 
     weather->dirX[elm_num] = (rand() % (weather->dirXmax - weather->dirXmin + 1)) + weather->dirXmin;
     weather->dirY[elm_num] = (rand() % (weather->dirYmax - weather->dirYmin + 1)) + weather->dirYmin;
@@ -169,7 +198,9 @@ void freeLevel(Lvl *lvl, int mode)
 
     if(mode == PLAY)
     {
-        Mix_PauseMusic();
+        removeAllMonsters(lvl->monsterList);
+        free(lvl->monsterList);
+
         Mix_HaltMusic();
         Mix_FreeMusic(lvl->music);
     }
@@ -177,55 +208,76 @@ void freeLevel(Lvl *lvl, int mode)
 
     Mix_FreeChunk(lvl->weather->sfx);
 
-    free(lvl->weather->pos);
+    free(lvl->weather->pos_dst);
     free(lvl->weather->dirX);
     free(lvl->weather->dirY);
+    free(lvl->weather->scale);
     SDL_DestroyTexture(lvl->weather->texture);
 
     free(lvl->weather);
 }
 
 
-void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, unsigned long frame_num, int mode)
+void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, const int player_num, unsigned long frame_num, int mode, const int num_players)
 {
     int x, y, mapX, x1, x2, mapY, y1, y2;
 
-    mapX = lvl->startX / TILE_SIZE;
-    x1 = (lvl->startX % TILE_SIZE) * -1;
+    mapX = lvl->startX[player_num] / TILE_SIZE;
+    x1 = (lvl->startX[player_num] % TILE_SIZE) * -1;
     x2 = x1 + WINDOW_W + (x1 == 0 ? 0 : TILE_SIZE);
 
-    mapY = lvl->startY / TILE_SIZE;
-    y1 = (lvl->startY % TILE_SIZE) * -1;
-    y2 = y1 + WINDOW_H + (y1 == 0 ? 0 : TILE_SIZE);
+    mapY = lvl->startY[player_num] / TILE_SIZE;
+    y1 = (lvl->startY[player_num] % TILE_SIZE) * -1 + (WINDOW_H / num_players) * player_num;
+    y2 = y1 + WINDOW_H / num_players + (y1 == 0 ? 0 : TILE_SIZE);
 
     for (y = y1; y < y2; y += TILE_SIZE)
     {
-        mapX = lvl->startX / TILE_SIZE;
+        mapX = lvl->startX[player_num] / TILE_SIZE;
 
         for (x = x1; x < x2; x += TILE_SIZE)
         {
             if(lvl->map[mapX][mapY] == MONSTER_NUM && mode == PLAY)
             {
-                 createMonster(player, mapX * TILE_SIZE, mapY * TILE_SIZE, (lvl->number == NUM_LEVEL) ? 10 : 1);
+                 createMonster(lvl, mapX * TILE_SIZE, mapY * TILE_SIZE, (lvl->number == BOSS_1_LEVEL || lvl->number == BOSS_2_LEVEL) ? 10 : 1, 0);
                  lvl->map[mapX][mapY] = 0;
             }
             else if(lvl->map[mapX][mapY] == MOVING_PLAT_NUM && mode == PLAY)
             {
-                createMovingPlat(lvl, mapX * TILE_SIZE, mapY * TILE_SIZE);
+                createMovingPlat(lvl, mapX * TILE_SIZE, mapY * TILE_SIZE, num_players);
                 lvl->map[mapX][mapY] = 0;
             }
 
             SDL_Rect pos_dst;
-            pos_dst.x = x;
-            pos_dst.y = y;
-            pos_dst.w = TILE_SIZE;
-            pos_dst.h = TILE_SIZE;
+
+            int offsetX = 0;
+            if(x < 0)
+            {
+                pos_dst.x = 0;
+                offsetX = -x;
+            }
+            else
+                pos_dst.x = x;
+
+            int offsetY = 0;
+            if(y < (WINDOW_H / num_players) * player_num)
+            {
+                pos_dst.y = (WINDOW_H / num_players) * player_num;
+                offsetY = (WINDOW_H / num_players) * player_num - y;
+            }
+            else
+                pos_dst.y = y;
+
+            pos_dst.w = TILE_SIZE - offsetX;
+            pos_dst.h = TILE_SIZE - offsetY;
 
             SDL_Rect pos_src;
-            pos_src.w = TILE_SIZE;
-            pos_src.h = TILE_SIZE;
-            pos_src.x = lvl->map[mapX][mapY] * TILE_SIZE;
-            pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
+            pos_src.w = TILE_SIZE - offsetX;
+            pos_src.h = TILE_SIZE - offsetY;
+            pos_src.x = lvl->map[mapX][mapY] * TILE_SIZE + offsetX;
+            pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE + offsetY;
+
+            if(mode == PLAY && lvl->map[mapX][mapY] == CHECKPOINT_NUM && player->isCheckpointActive)
+                pos_src.x += TILE_SIZE;
 
             SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
 
@@ -238,28 +290,40 @@ void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *p
 }
 
 
-void initPlayer(SDL_Renderer *renderer, Player *player)
+void initPlayer(SDL_Renderer *renderer, Player *player, int player_num)
 {
-    player->texture[IDLE_LEFT] = IMG_LoadTexture(renderer, "./data/tilesets/idleleft.png");
-    player->texture[IDLE_RIGHT] = IMG_LoadTexture(renderer, "./data/tilesets/idleright.png");
-    player->texture[WALK_LEFT] = IMG_LoadTexture(renderer, "./data/tilesets/walkleft.png");
-    player->texture[WALK_RIGHT] = IMG_LoadTexture(renderer, "./data/tilesets/walkright.png");
-    player->texture[JUMP_LEFT] = IMG_LoadTexture(renderer, "./data/tilesets/jumpleft.png");
-    player->texture[JUMP_RIGHT] = IMG_LoadTexture(renderer, "./data/tilesets/jumpright.png");
+    char str[100] = "";
+
+    sprintf(str, "./data/tilesets/idleleft%d.png", player_num + 1);
+    player->texture[IDLE_LEFT] = IMG_LoadTexture(renderer, str);
+
+    sprintf(str, "./data/tilesets/idleright%d.png", player_num + 1);
+    player->texture[IDLE_RIGHT] = IMG_LoadTexture(renderer, str);
+
+    sprintf(str, "./data/tilesets/walkleft%d.png", player_num + 1);
+    player->texture[WALK_LEFT] = IMG_LoadTexture(renderer, str);
+
+    sprintf(str, "./data/tilesets/walkright%d.png", player_num + 1);
+    player->texture[WALK_RIGHT] = IMG_LoadTexture(renderer, str);
+
+    sprintf(str, "./data/tilesets/jumpleft%d.png", player_num + 1);
+    player->texture[JUMP_LEFT] = IMG_LoadTexture(renderer, str);
+
+    sprintf(str, "./data/tilesets/jumpright%d.png", player_num + 1);
+    player->texture[JUMP_RIGHT] = IMG_LoadTexture(renderer, str);
+
     player->direction = RIGHT;
     player->state = IDLE_RIGHT;
     player->frame = 0;
     player->pos.w = PLAYER_W;
     player->pos.h = PLAYER_H;
-    player->lifes = 3;
+    player->lifes = 4;
     player->money = 0;
     player->killed = 0;
     player->isCheckpointActive = 0;
     respawn(player);
     player->dead = 0;
     player->frame_explosion = 0;
-    player->monsterList = malloc(sizeof(MonsterList));
-    initMonsterList(player->monsterList);
 }
 
 void respawn(Player *player)
@@ -317,11 +381,13 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
         if(KEY_ESCAPE || KEY_ENTER_MENU)
         {
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
-            in->controller.buttons[0] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
             escape = 1;
         }
 
@@ -331,7 +397,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
         SDL_RenderCopy(renderer, texture[1], NULL, &pos_dst[1]);
         SDL_RenderPresent(renderer);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
     }
 
     transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0);
@@ -341,21 +407,257 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 }
 
 
-void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings)
+void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net)
 {
-    intro(renderer, in, pictures, fonts, sounds);
+    SDL_Color white = {255, 255, 255};
+    int escape = 0, selected = 1, goToCenter = 0, modified = 0;
+    unsigned long time1 = 0, time2 = 0, frame_num = 0;
+    char str[100] = "";
+    SDL_Texture *texture[8];
+    SDL_Rect pos_dst[8];
+    int visible[2];
+    unsigned long times[NUM_TIMES];
+    loadTimes(times);
+
+    texture[0] = RenderTextBlended(renderer, fonts->ocraext_title, "Niveau 1", white);
+    texture[6] = RenderTextBlended(renderer, fonts->ocraext_title, "<", white);
+    texture[7] = RenderTextBlended(renderer, fonts->ocraext_title, ">", white);
+
+    visible[0] = 0;
+    visible[1] = 1;
+
+    int j = (selected - 1) * 5;
+
+    for(int i = 1; i < 6; i++)
+    {
+        if(times[j + i - 1] == 0)
+            sprintf(str, "%d) --------", i);
+        else
+            sprintf(str, "%d) %lu.%lu%lu%lu s", i, times[j + i - 1] / 1000, (times[j + i - 1] % 1000 < 100) ? 0 : (times[j + i - 1] % 1000) / 100, (times[j + i - 1] % 100 < 10) ? 0 : (times[j + i - 1] % 100) / 10, (times[j + i - 1] % 10 == 0) ? 0 : times[j + i - 1] % 10);
+        texture[i] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+    }
+
+    for(int i = 0; i < 8; i++)
+    {
+        SDL_QueryTexture(texture[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
+        pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
+
+        if(i == 0 || i == 6 || i == 7)
+            pos_dst[i].y = WINDOW_H / 2 - pos_dst[i].h / 2 - 170;
+        else
+            pos_dst[i].y = 310 + (i - 1) * 50;
+    }
+
+    pos_dst[6].x -= pos_dst[0].w / 2 + 60;
+    pos_dst[7].x += pos_dst[0].w / 2 + 60;
+
+    transition(renderer, pictures->title, 6, texture, pos_dst, ENTERING, 1);
+
+    while(!escape)
+    {
+        updateEvents(in);
+
+        if(in->quit)
+        {
+            if(net != NULL)
+            {
+                ChoosePacket packet;
+                packet.level_num = -1;
+                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+            }
+
+            exit(EXIT_SUCCESS);
+        }
+        if(KEY_ESCAPE)
+        {
+            in->key[SDL_SCANCODE_ESCAPE] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
+            escape = 1;
+        }
+        if(KEY_LEFT_MENU)
+        {
+            in->key[SDL_SCANCODE_LEFT] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[0] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[0] = 0;
+
+            if(selected > 1)
+            {
+                selected--;
+                modified = 1;
+            }
+
+        }
+        if(KEY_RIGHT_MENU)
+        {
+            in->key[SDL_SCANCODE_RIGHT] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[0] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[0] = 0;
+
+            if(selected < NUM_LEVEL)
+            {
+                selected++;
+                modified = 1;
+            }
+
+        }
+        if(KEY_ENTER_MENU)
+        {
+            in->key[SDL_SCANCODE_SPACE] = 0;
+            in->key[SDL_SCANCODE_RETURN] = 0;
+            in->key[SDL_SCANCODE_KP_ENTER] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
+
+            transition(renderer, pictures->title, 6, texture, pos_dst, ENTERING, 0);
+
+            if(net != NULL)
+            {
+                ChoosePacket packet;
+                packet.level_num = selected;
+                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+            }
+
+            Mix_HaltMusic();
+            Mix_FreeMusic(*music);
+
+            playGame(renderer, in, pictures, fonts, sounds, settings, selected, ONE_LEVEL, num_player, net);
+
+            *music = Mix_LoadMUS("./data/music/menu.mp3");
+            Mix_PlayMusic(*music, -1);
+
+            loadTimes(times);
+            modified = 1;
+
+            transition(renderer, pictures->title, 6, texture, pos_dst, EXITING, 1);
+        }
+
+
+        if(modified)
+        {
+            if(selected == 1)
+                visible[0] = 0;
+            else
+                visible[0] = 1;
+
+            if(selected == NUM_LEVEL)
+                visible[1] = 0;
+            else
+                visible[1] = 1;
+
+            int j = (selected - 1) * 5;
+
+            for(int i = 0; i < 6; i++)
+                SDL_DestroyTexture(texture[i]);
+
+            sprintf(str, "Niveau %d", selected);
+            texture[0] = RenderTextBlended(renderer, fonts->ocraext_title, str, white);
+
+            for(int i = 1; i < 6; i++)
+            {
+                if(times[j + i - 1] == 0)
+                    sprintf(str, "%d) --------", i);
+                else
+                    sprintf(str, "%d) %lu.%lu%lu%lu s", i, times[j + i - 1] / 1000, (times[j + i - 1] % 1000 < 100) ? 0 : (times[j + i - 1] % 1000) / 100, (times[j + i - 1] % 100 < 10) ? 0 : (times[j + i - 1] % 100) / 10, (times[j + i - 1] % 10 == 0) ? 0 : times[j + i - 1] % 10);
+                texture[i] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+            }
+
+            for(int i = 0; i < 8; i++)
+            {
+                SDL_QueryTexture(texture[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
+                pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
+
+                if(i == 0 || i == 6 || i == 7)
+                    pos_dst[i].y = WINDOW_H / 2 - pos_dst[i].h / 2 - 170;
+                else
+                    pos_dst[i].y = 310 + (i - 1) * 50;
+            }
+
+            pos_dst[6].x -= pos_dst[0].w / 2 + 60;
+            pos_dst[7].x += pos_dst[0].w / 2 + 60;
+
+            modified = 0;
+        }
+
+        SDL_RenderClear(renderer);
+        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+
+        frame_num++;
+        if(frame_num % 30 == 0)
+            goToCenter = !goToCenter;
+
+        if(goToCenter)
+        {
+            pos_dst[6].x++;
+            pos_dst[7].x--;
+        }
+        else
+        {
+            pos_dst[6].x--;
+            pos_dst[7].x++;
+        }
+
+        for(int i = 0; i < 8; i++)
+            if(i < 6 || visible[i - 6])
+                SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
+
+
+        SDL_RenderPresent(renderer);
+
+        waitGame(&time1, &time2, DELAY_GAME);
+
+    }
+
+    transition(renderer, pictures->title, 6, texture, pos_dst, EXITING, 0);
+
+    for(int i = 0; i < 8; i++)
+        SDL_DestroyTexture(texture[i]);
+}
+
+
+void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net)
+{
+    /*
+    if(level_num == 1)
+        intro(renderer, in, pictures, fonts, sounds);
+    */
 
     Lvl *lvl = malloc(sizeof(Lvl));
     if(lvl == NULL)
         exit(EXIT_FAILURE);
 
-    loadLevel(renderer, 1, lvl, PLAY, settings);
+    loadLevel(renderer, level_num, lvl, PLAY, settings);
     unsigned long time1 = 0, time2 = 0, frame_num = 0;
     int escape = 0, finished = 0;
-    Player *player = malloc(sizeof(Player));
-    initPlayer(renderer, player);
+    int lvl_finished[num_player];
+    int has_updated_scores[num_player];
+    for(int i = 0; i < num_player; i++)
+    {
+         lvl_finished[i] = 0;
+         has_updated_scores[i] = 0;
+    }
 
-    displayLevelName(renderer, pictures, fonts, lvl, in);
+
+    Player *player[num_player];
+    for(int i = 0; i < num_player; i++)
+    {
+        player[i] = malloc(sizeof(Player));
+        initPlayer(renderer, player[i], i);
+        player[i]->timer = 0;
+    }
+
+    if(net == NULL)
+        displayLevelName(renderer, pictures, fonts, lvl, in);
+    else
+    {
+        receive = 1;
+        SDL_CreateThread(receive_thread, "receive_thread", net);
+    }
+
 
     while(!escape)
     {
@@ -363,138 +665,311 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
 
         if(in->quit)
             exit(EXIT_SUCCESS);
-        if(KEY_ESCAPE)
+        if(KEY_ESCAPE || KEY_PAUSE)
         {
+            in->key[SDL_SCANCODE_P] = 0;
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
-            escape = 1;
-        }
-        if(KEY_LEFT_GAME)
-        {
-            player->direction = LEFT;
-            player->dirX = -4;
+            in->controller[0].buttons[6] = 0;
+            in->controller[0].buttons[7] = 0;
+            in->controller[1].buttons[6] = 0;
+            in->controller[1].buttons[7] = 0;
 
-            if(player->state != WALK_LEFT && player->on_ground)
-            {
-                player->state = WALK_LEFT;
-                player->frame = 0;
-            }
-        }
-        if(KEY_RIGHT_GAME)
-        {
-            player->direction = RIGHT;
-            player->dirX = 4;
+            SDL_Texture *texture = getScreenTexture(renderer);
 
-            if(player->state != WALK_RIGHT && player->on_ground)
+            if(net != NULL)
+                receive = 0;
+
+            if(pauseGame(renderer, texture, pictures, fonts, in) == 2)
+                escape = 1;
+
+            if(net != NULL && !escape)
             {
-                player->state = WALK_RIGHT;
-                player->frame = 0;
-            }
-        }
-        if(KEY_UP_GAME)
-        {
-            if(player->on_ground)
-            {
-                player->dirY = -JUMP_HEIGHT;
-                player->on_ground = 0;
-                player->can_jump = 1;
-                Mix_PlayChannel(-1, sounds->jump, 0);
-            }
-            else if(player->can_jump)
-            {
-                player->dirY = -JUMP_HEIGHT;
-                player->can_jump = 0;
-                Mix_PlayChannel(-1, sounds->jump, 0);
+                receive = 1;
+                SDL_CreateThread(receive_thread, "receive_thread", net);
             }
 
-            in->key[SDL_SCANCODE_UP] = 0;
-            in->controller.buttons[0] = 0;
+            SDL_DestroyTexture(texture);
         }
 
 
-        if(!player->on_ground)
+        for(int i = 0; i < num_player; i++)
         {
-            if(player->direction == RIGHT && player->state != JUMP_RIGHT)
+            if(lvl_finished[i] && !has_updated_scores[i])
             {
-                player->state = JUMP_RIGHT;
-                player->frame = 0;
-            }
-            if(player->direction == LEFT && player->state != JUMP_LEFT)
-            {
-                player->state = JUMP_LEFT;
-                player->frame = 0;
+                updateTimes(level_num, player[i]->timer);
+                has_updated_scores[i] = 1;
             }
         }
-        else if(!(KEY_LEFT_GAME) && !(KEY_RIGHT_GAME))
+
+
+        if(lvl_finished[0] && (num_player < 2 || lvl_finished[1]) && (KEY_ENTER_MENU))
         {
-            if(player->state == JUMP_LEFT || player->state == WALK_LEFT || player->state == IDLE_LEFT)
-                player->state = IDLE_LEFT;
+            in->key[SDL_SCANCODE_SPACE] = 0;
+            in->key[SDL_SCANCODE_RETURN] = 0;
+            in->key[SDL_SCANCODE_KP_ENTER] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
+
+            for(int i = 0; i < num_player; i++)
+            {
+                lvl_finished[i] = 0;
+                has_updated_scores[i] = 0;
+            }
+
+            if(mode == ALL_LEVELS)
+            {
+                if(lvl->number < NUM_LEVEL)
+                {
+                    level_num++;
+                    freeLevel(lvl, PLAY);
+                    loadLevel(renderer, level_num, lvl, PLAY, settings);
+
+                    for(int i = 0; i < num_player; i++)
+                    {
+                        player[i]->isCheckpointActive = 0;
+                        player[i]->timer = 0;
+                        respawn(player[i]);
+                    }
+
+                    if(net == NULL)
+                        displayLevelName(renderer, pictures, fonts, lvl, in);
+                }
+                else
+                {
+                    escape = 1;
+                    finished = 1;
+                }
+            }
             else
-                player->state = IDLE_RIGHT;
+                escape = 1;
+        }
+
+        updateMovingPlat(lvl, player, num_player);
+        if(updateMonsters(lvl, player, num_player, sounds, in, fonts, renderer)) // If the boss was killed
+        {
+            Mix_PlayChannel(-1, sounds->complete, 0);
+            for(int i = 0; i < num_player; i++)
+                 lvl_finished[i] = 1;
         }
 
 
 
-        updateMovingPlat(lvl, player);
-        if(!player->dead)
-            mapCollisionPlayer(renderer, lvl, player, sounds, in, pictures, fonts, settings);
+        for(int i = 0; i < num_player; i++)
+        {
+            if(!lvl_finished[i])
+            {
+                if(KEY_LEFT_GAME)
+                {
+                    player[i]->direction = LEFT;
+                    player[i]->dirX = -4;
+
+                    if(player[i]->state != WALK_LEFT && player[i]->on_ground)
+                    {
+                        player[i]->state = WALK_LEFT;
+                        player[i]->frame = 0;
+                    }
+                }
+                if(KEY_RIGHT_GAME)
+                {
+                    player[i]->direction = RIGHT;
+                    player[i]->dirX = 4;
+
+                    if(player[i]->state != WALK_RIGHT && player[i]->on_ground)
+                    {
+                        player[i]->state = WALK_RIGHT;
+                        player[i]->frame = 0;
+                    }
+                }
+                if(KEY_UP_GAME)
+                {
+                    if(player[i]->on_ground)
+                    {
+                        player[i]->dirY = -JUMP_HEIGHT;
+                        player[i]->on_ground = 0;
+                        player[i]->can_jump = 1;
+                        Mix_PlayChannel(-1, sounds->jump, 0);
+                    }
+                    else if(player[i]->can_jump)
+                    {
+                        player[i]->dirY = -JUMP_HEIGHT;
+                        player[i]->can_jump = 0;
+                        Mix_PlayChannel(-1, sounds->jump, 0);
+                    }
+
+                    in->key[settings->controls[i].jump] = 0;
+                    if(num_player == 1)
+                        in->key[settings->controls[i + 1].jump] = 0;
+                    in->controller[i].buttons[0] = 0;
+                }
+            }
+
+
+            if(!player[i]->on_ground)
+            {
+                if(player[i]->direction == RIGHT && player[i]->state != JUMP_RIGHT)
+                {
+                    player[i]->state = JUMP_RIGHT;
+                    player[i]->frame = 0;
+                }
+                if(player[i]->direction == LEFT && player[i]->state != JUMP_LEFT)
+                {
+                    player[i]->state = JUMP_LEFT;
+                    player[i]->frame = 0;
+                }
+            }
+            else if(!(KEY_LEFT_GAME) && !(KEY_RIGHT_GAME))
+            {
+                if(player[i]->state == JUMP_LEFT || player[i]->state == WALK_LEFT || player[i]->state == IDLE_LEFT)
+                    player[i]->state = IDLE_LEFT;
+                else
+                    player[i]->state = IDLE_RIGHT;
+            }
+
+            if(!player[i]->dead)
+                if(mapCollisionPlayer(renderer, lvl, player[i], i, sounds, in, pictures, fonts, settings, num_player, mode))
+                {
+                    Mix_PlayChannel(-1, sounds->complete, 0);
+                    lvl_finished[i] = 1;
+                }
+        }
 
         SDL_RenderClear(renderer); // put this line after mapCollisionPlayer(...), because of the animation of the end of a level.
 
-        centerScrollingOnPlayer(lvl, player);
-        SDL_RenderCopy(renderer, lvl->sky, NULL, NULL);
-        displayWeather(renderer, player, lvl->weather, frame_num);
-        displayGame(renderer, pictures, lvl, player, frame_num, PLAY);
-        displayPlayer(renderer, lvl, player, pictures);
-        if(updateMonsters(lvl, player, sounds, in)) // If the boss was killed
+        for(int i = 0; i < num_player; i++)
         {
-            escape = 1;
-            finished = 1;
+            centerScrollingOnPlayer(lvl, player[i], i, num_player);
+            displaySky(renderer, player[i], num_player, i, lvl);
+            displayWeather(renderer, lvl->weather, i, num_player);
+            displayGame(renderer, pictures, lvl, player[i], i, frame_num, PLAY, num_player);
+            displayMonsters(renderer, lvl, player[i], i, num_player, pictures, frame_num);
+            displayMovingPlat(renderer, lvl, frame_num, i, num_player);
+            displayHUD(renderer, player[i], i, lvl, pictures, fonts, lvl->number, num_player);
         }
-        displayMonsters(renderer, lvl, player, pictures, frame_num);
-        displayMovingPlat(renderer, lvl, frame_num);
-        displayHUD(renderer, player, pictures, fonts, lvl->number);
+
+        for(int i = 0; i < num_player; i++)
+            displayPlayer(renderer, lvl, player[i], i, num_player, pictures);
+
+        if(net != NULL)
+        {
+            Packet packet;
+            packet.point.x = player[0]->pos.x;
+            packet.point.y = player[0]->pos.y;
+            packet.state = player[0]->state;
+            packet.frame = player[0]->frame;
+            sendPos(net, &packet);
+
+            displayOtherPlayer(renderer, lvl, player[0], other_packet);
+        }
+
+        for(int i = 0; i < num_player; i++)
+            if(lvl_finished[i])
+                levelFinished(renderer, fonts, player[i], level_num, num_player, i, lvl_finished);
+
         SDL_RenderPresent(renderer);
 
         frame_num++;
 
-        player->frame++;
-        int w;
-        SDL_QueryTexture(player->texture[player->state], NULL, NULL, &w, NULL);
-        if(player->frame >= (w * 2) / PLAYER_W)
-            player->frame = 0;
-
-        player->dirX = 0;
-        player->dirY += GRAVITY_SPEED;
-        if(player->dirY >= MAX_FALL_SPEED)
-            player->dirY = MAX_FALL_SPEED;
-
-        wait(&time1, &time2, DELAY_GAME);
-
-        if(player->lifes < 0 && !player->dead)
+        for(int i = 0; i < num_player; i++)
         {
-            gameOver(renderer, pictures, fonts, in);
-            escape = 1;
+            player[i]->frame++;
+            int w;
+            SDL_QueryTexture(player[i]->texture[player[i]->state], NULL, NULL, &w, NULL);
+            if(player[i]->frame >= (w * 2) / PLAYER_W)
+                player[i]->frame = 0;
+
+            player[i]->dirX = 0;
+            player[i]->dirY += GRAVITY_SPEED;
+            if(player[i]->dirY >= MAX_FALL_SPEED)
+                player[i]->dirY = MAX_FALL_SPEED;
+
+            if(!lvl_finished[i])
+                player[i]->timer += DELAY_GAME;
         }
 
-        if(player->invicibleFramesLeft > 0)
-            player->invicibleFramesLeft--;
+
+        waitGame(&time1, &time2, DELAY_GAME);
+
+
+        for(int i = 0; i < num_player; i++)
+        {
+            if(num_player < 2 && player[i]->lifes < 0 && !player[i]->dead)
+            {
+                receive = 0;
+                gameOver(renderer, pictures, fonts, in);
+                escape = 1;
+            }
+
+            if(player[i]->invicibleFramesLeft > 0)
+                player[i]->invicibleFramesLeft--;
+        }
     }
+
 
     freeLevel(lvl, PLAY);
     free(lvl);
 
+    if(finished && num_player < 2)
+        displayScore(renderer, player[0], in, pictures, fonts);
 
-    if(finished)
-        displayScore(renderer, player, in, pictures, fonts);
+    for(int i = 0; i < num_player; i++)
+        freePlayer(player[i]);
 
-    freePlayer(player);
+    if(net != NULL)
+        receive = 0;
 }
+
+
+void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet)
+{
+    SDL_Rect pos_dst;
+    pos_dst.x = packet.point.x - lvl->startX[0];
+    pos_dst.y = packet.point.y - lvl->startY[0];
+    pos_dst.w = PLAYER_W;
+    pos_dst.h = PLAYER_H;
+
+    SDL_Rect pos_src;
+    pos_src.x = (packet.frame / 2) * PLAYER_W;
+    pos_src.y = 0;
+    pos_src.w = PLAYER_W;
+    pos_src.h = PLAYER_H;
+
+    SDL_SetTextureBlendMode(player->texture[packet.state], SDL_BLENDMODE_BLEND);
+    SDL_SetTextureAlphaMod(player->texture[packet.state], 128);
+    SDL_RenderCopy(renderer, player->texture[packet.state], &pos_src, &pos_dst);
+    SDL_SetTextureAlphaMod(player->texture[packet.state], 255);
+}
+
+void displaySky(SDL_Renderer *renderer, Player *player, int num_player, int player_num, Lvl *lvl)
+{
+    SDL_Rect pos_src[2];
+    SDL_Rect pos_dst[2];
+
+    pos_src[0].x = (lvl->startX[player_num] % (int) (WINDOW_W * 4)) / 4;
+    pos_src[0].w = WINDOW_W - pos_src[0].x;
+    pos_dst[0].x = 0;
+    pos_dst[0].w = pos_src[0].w;
+
+    pos_src[1].x = 0;
+    pos_src[1].w = WINDOW_W - pos_src[0].w;
+    pos_dst[1].x = pos_src[0].w;
+    pos_dst[1].w = pos_src[0].x;
+
+    for(int i = 0; i < 2; i++)
+    {
+        pos_src[i].y = num_player == 1 ? 0 : WINDOW_H / 4;
+        pos_src[i].h = WINDOW_H / num_player;
+        pos_dst[i].y = (WINDOW_H / num_player) * player_num;
+        pos_dst[i].h = WINDOW_H / num_player;
+
+        SDL_RenderCopy(renderer, lvl->sky, &pos_src[i], &pos_dst[i]);
+    }
+}
+
 
 
 void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *pictures, Fonts *fonts)
 {
-    long score = player->lifes * 1000 + player->killed * 100 + player->money * 10;
+    unsigned long score = player->lifes * 1000 + player->killed * 100 + player->money * 10;
     int escape = 0;
     SDL_Texture *texture[5];
     SDL_Rect pos_dst[5];
@@ -533,9 +1008,11 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
-            in->controller.buttons[0] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
             escape = 1;
         }
 
@@ -547,7 +1024,7 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
 
         SDL_RenderPresent(renderer);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
     }
 
     transition(renderer, pictures->title, 5, texture, pos_dst, EXITING, 0);
@@ -595,22 +1072,47 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
 }
 
 
-void displayWeather(SDL_Renderer *renderer, Player *player, Weather *weather, unsigned long frame_num)
+void displayWeather(SDL_Renderer *renderer, Weather *weather, int player_num, int num_player)
 {
-    int w;
-    SDL_QueryTexture(weather->texture, NULL, NULL, &w, NULL);
-
     for(int i = 0; i < weather->num_elm; i++)
     {
-        if(weather->pos[i].y >= WINDOW_H || weather->pos[i].x >= WINDOW_W || weather->pos[i].x + w < 0)
+        if(weather->pos_dst[i].y >= WINDOW_H || weather->pos_dst[i].x >= WINDOW_W || weather->pos_dst[i].x + weather->pos_dst[i].w < 0)
             setWeatherElement(weather, i, 1);
-        else
+        else if(weather->pos_dst[i].y >= (WINDOW_H / num_player) * player_num && weather->pos_dst[i].y < (WINDOW_H / num_player) * (player_num + 1))
         {
-            weather->pos[i].x += weather->dirX[i];
-            weather->pos[i].y += weather->dirY[i];
+            weather->pos_dst[i].x += weather->dirX[i];
+            weather->pos_dst[i].y += weather->dirY[i];
         }
 
-        SDL_RenderCopy(renderer, weather->texture, NULL, &weather->pos[i]);
+        if(weather->pos_dst[i].y + weather->pos_dst[i].h >= (WINDOW_H / num_player) * player_num && weather->pos_dst[i].y < (WINDOW_H / num_player) * (player_num + 1))
+        {
+            SDL_Rect pos_src;
+            pos_src.x = 0;
+
+            int w, h;
+            SDL_QueryTexture(weather->texture, NULL, NULL, &w, &h);
+
+            if(weather->pos_dst[i].y >= (WINDOW_H / num_player) * player_num)
+            {
+                pos_src.y = 0;
+                pos_src.h = h;
+            }
+            else
+            {
+                pos_src.y = (WINDOW_H / num_player) * player_num - weather->pos_dst[i].y;
+                pos_src.h = h - pos_src.y;
+
+                weather->pos_dst[i].y = (WINDOW_H / num_player) * player_num;
+                weather->pos_dst[i].h = pos_src.h;
+            }
+
+            pos_src.w = w;
+
+            SDL_RenderCopy(renderer, weather->texture, &pos_src, &weather->pos_dst[i]);
+
+            weather->pos_dst[i].h = h * weather->scale[i];
+        }
+
     }
 
 }
@@ -643,7 +1145,8 @@ void gameOver(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *i
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
-            in->controller.buttons[0] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
             escape = 1;
         }
 
@@ -656,7 +1159,7 @@ void gameOver(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *i
 
         SDL_RenderPresent(renderer);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
         frame++;
     }
 
@@ -671,34 +1174,45 @@ void freePlayer(Player *player)
     for(int i = 0; i < NUM_STATE; i++)
         SDL_DestroyTexture(player->texture[i]);
 
-    removeAllMonsters(player->monsterList);
-    free(player->monsterList);
-
     free(player);
 }
 
 
-void displayHUD(SDL_Renderer *renderer, Player *player, Pictures *pictures, Fonts *fonts, int level_num)
+void displayHUD(SDL_Renderer *renderer, Player *player, int player_num, Lvl *lvl, Pictures *pictures, Fonts *fonts, int level_num, int num_player)
 {
-    SDL_Color color = {255, 0, 0};
+    SDL_Color color = {0, 0, 0};
+    if(player_num == 1)
+        color.r = 255;
+    else
+    {
+        color.b = 255;
+        color.g = 128;
+    }
+
+    SDL_Texture *texture = NULL;
     char str[100] = "";
     SDL_Rect pos_dst;
     pos_dst.x = 10;
-    pos_dst.y = 10;
-    SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_dst.w, &pos_dst.h);
-    SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_dst);
+    pos_dst.y = 10 + (WINDOW_H / 2) * player_num;
 
-    sprintf(str, "x %d", player->lifes);
-    SDL_Texture *texture = RenderTextBlended(renderer, fonts->ocraext_message, str, color);
-    pos_dst.x += pos_dst.w + 10;
-    pos_dst.y += pos_dst.h / 2;
-    SDL_QueryTexture(texture, NULL, NULL, &pos_dst.w, &pos_dst.h);
-    pos_dst.y -= pos_dst.h / 2;
-    SDL_RenderCopy(renderer, texture, NULL, &pos_dst);
-    SDL_DestroyTexture(texture);
+    if(num_player < 2)
+    {
+        SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_dst.w, &pos_dst.h);
+        SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_dst);
 
-    pos_dst.x += pos_dst.w + 20;
-    pos_dst.y = 10;
+        sprintf(str, "x %d", player->lifes);
+        texture = RenderTextBlended(renderer, fonts->ocraext_message, str, color);
+        pos_dst.x += pos_dst.w + 10;
+        pos_dst.y += pos_dst.h / 2;
+        SDL_QueryTexture(texture, NULL, NULL, &pos_dst.w, &pos_dst.h);
+        pos_dst.y -= pos_dst.h / 2;
+        SDL_RenderCopy(renderer, texture, NULL, &pos_dst);
+        SDL_DestroyTexture(texture);
+
+        pos_dst.x += pos_dst.w + 20;
+        pos_dst.y = 10 + (WINDOW_H / 2) * player_num;
+    }
+
     SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_dst.w, &pos_dst.h);
     SDL_RenderCopy(renderer, pictures->HUDcoin, NULL, &pos_dst);
 
@@ -711,6 +1225,19 @@ void displayHUD(SDL_Renderer *renderer, Player *player, Pictures *pictures, Font
     SDL_RenderCopy(renderer, texture, NULL, &pos_dst);
     SDL_DestroyTexture(texture);
 
+    pos_dst.x += pos_dst.w + 20;
+    pos_dst.y = 10 + (WINDOW_H / 2) * player_num;
+    SDL_QueryTexture(pictures->HUDtimer, NULL, NULL, &pos_dst.w, &pos_dst.h);
+    SDL_RenderCopy(renderer, pictures->HUDtimer, NULL, &pos_dst);
+
+    sprintf(str, "%lu.%lu", player->timer / 1000, (player->timer % 1000 < 100) ? 0 : (player->timer % 1000) / 100);
+    texture = RenderTextBlended(renderer, fonts->ocraext_message, str, color);
+    pos_dst.x += pos_dst.w + 10;
+    pos_dst.y += pos_dst.h / 2;
+    SDL_QueryTexture(texture, NULL, NULL, &pos_dst.w, &pos_dst.h);
+    pos_dst.y -= pos_dst.h / 2;
+    SDL_RenderCopy(renderer, texture, NULL, &pos_dst);
+    SDL_DestroyTexture(texture);
 
     sprintf(str, "Mini-Booba tués : %d", player->killed);
     texture = RenderTextBlended(renderer, fonts->ocraext_message, str, color);
@@ -719,57 +1246,76 @@ void displayHUD(SDL_Renderer *renderer, Player *player, Pictures *pictures, Font
     SDL_RenderCopy(renderer, texture, NULL, &pos_dst);
     SDL_DestroyTexture(texture);
 
-    if(level_num == NUM_LEVEL)
-        displayBossLife(renderer, player, fonts);
+    if(level_num == BOSS_1_LEVEL || level_num == BOSS_2_LEVEL)
+        displayBossLife(renderer, lvl, fonts);
 }
 
 
-void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Pictures *pictures)
+void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures)
 {
     SDL_Rect pos_src;
     SDL_Rect pos_dst;
 
-    if(!player->dead)
+    for(int i = 0; i < num_player; i++)
     {
-        pos_src.x = (player->frame / 2) * PLAYER_W;
-        pos_src.y = 0;
-        pos_src.w = PLAYER_W;
-        pos_src.h = PLAYER_H;
-
-        pos_dst.x = player->pos.x - lvl->startX;
-        pos_dst.y = player->pos.y - lvl->startY;
-        pos_dst.w = player->pos.w;
-        pos_dst.h = player->pos.h;
-
-        SDL_RenderCopy(renderer, player->texture[player->state], &pos_src, &pos_dst);
-    }
-    else
-    {
-        pos_src.x = (player->frame_explosion / 8) * EXPLOSION_SIZE;
-        pos_src.y = 0;
-        pos_src.w = EXPLOSION_SIZE;
-        pos_src.h = EXPLOSION_SIZE;
-
-        pos_dst.x = player->pos.x + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startX;
-        pos_dst.y = player->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY;
-        pos_dst.w = EXPLOSION_SIZE;
-        pos_dst.h = EXPLOSION_SIZE;
-
-        SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
-
-        player->frame_explosion++;
-        if(player->frame_explosion >= 56)
+        if(!player->dead)
         {
-            player->dead = 0;
-            respawn(player);
+            pos_src.x = (player->frame / 2) * PLAYER_W;
+            pos_src.y = 0;
+            pos_src.w = PLAYER_W;
+            pos_src.h = PLAYER_H;
+
+            pos_dst.x = player->pos.x - lvl->startX[i];
+            pos_dst.y = player->pos.y - lvl->startY[i] + (WINDOW_H / 2) * i;
+            pos_dst.w = player->pos.w;
+            pos_dst.h = player->pos.h;
+
+            if(pos_dst.x + PLAYER_W >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + PLAYER_H >= (WINDOW_H / num_player) * i && pos_dst.y < (WINDOW_H / num_player) * (i + 1))
+            {
+                if(player_num == i)
+                    SDL_RenderCopy(renderer, player->texture[player->state], &pos_src, &pos_dst);
+                else
+                {
+                    SDL_SetTextureBlendMode(player->texture[player->state], SDL_BLENDMODE_BLEND);
+                    SDL_SetTextureAlphaMod(player->texture[player->state], 128);
+                    SDL_RenderCopy(renderer, player->texture[player->state], &pos_src, &pos_dst);
+                    SDL_SetTextureAlphaMod(player->texture[player->state], 255);
+                }
+            }
+        }
+        else
+        {
+            pos_src.x = (player->frame_explosion / 8) * EXPLOSION_SIZE;
+            pos_src.y = 0;
+            pos_src.w = EXPLOSION_SIZE;
+            pos_src.h = EXPLOSION_SIZE;
+
+            pos_dst.x = player->pos.x + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startX[i];
+            pos_dst.y = player->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY[i] + (WINDOW_H / 2) * i;
+            pos_dst.w = EXPLOSION_SIZE;
+            pos_dst.h = EXPLOSION_SIZE;
+
+            if(pos_dst.x + EXPLOSION_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + EXPLOSION_SIZE >= (WINDOW_H / num_player) * i && pos_dst.y < (WINDOW_H / num_player) * (i + 1))
+                SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
+
+            if(i == 0)
+            {
+                player->frame_explosion++;
+                if(player->frame_explosion >= 56)
+                {
+                    player->dead = 0;
+                    respawn(player);
+                }
+            }
         }
     }
+
 
 }
 
 
 
-void displayMovingPlat(SDL_Renderer *renderer, Lvl *lvl, unsigned long frame_num)
+void displayMovingPlat(SDL_Renderer *renderer, Lvl *lvl, unsigned long frame_num, int player_num, int num_player)
 {
     for(int i = 0; i < lvl->num_moving_plat; i++)
     {
@@ -780,54 +1326,57 @@ void displayMovingPlat(SDL_Renderer *renderer, Lvl *lvl, unsigned long frame_num
         pos_src.h = TILE_SIZE;
 
         SDL_Rect pos_dst;
-        pos_dst.x = lvl->moving_plat[i].pos.x - lvl->startX;
-        pos_dst.y = lvl->moving_plat[i].pos.y - lvl->startY;
+        pos_dst.x = lvl->moving_plat[i].pos.x - lvl->startX[player_num];
+        pos_dst.y = lvl->moving_plat[i].pos.y - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
         pos_dst.w = TILE_SIZE;
         pos_dst.h = TILE_SIZE;
 
-        SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
+        if(pos_dst.x + TILE_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + TILE_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
+            SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
     }
 }
 
 
 
-void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, Pictures *pictures, unsigned long frame_num)
+void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, unsigned long frame_num)
 {
-    MonsterList *current = player->monsterList->next;
+    MonsterList *current = lvl->monsterList->next;
 
     while(current != NULL)
     {
         SDL_Rect pos_src;
         SDL_Rect pos_dst;
 
-        if(current->monster.lifes > 0)
+        if(current->lifes > 0)
         {
             pos_src.x = MONSTER_NUM * TILE_SIZE;
             pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
             pos_src.w = TILE_SIZE;
             pos_src.h = TILE_SIZE;
 
-            pos_dst.x = current->monster.pos.x - lvl->startX;
-            pos_dst.y = current->monster.pos.y - lvl->startY;
+            pos_dst.x = current->pos.x - lvl->startX[player_num];
+            pos_dst.y = (current->pos.y - lvl->startY[player_num]) + (WINDOW_H / 2) * player_num;
             pos_dst.w = TILE_SIZE;
             pos_dst.h = TILE_SIZE;
 
-            SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
+            if(pos_dst.x + TILE_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + TILE_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
+                SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
         }
 
-        if(current->monster.frame_explosion >= 0)
+        if(current->frame_explosion >= 0)
         {
-            pos_src.x = (current->monster.frame_explosion / 8) * EXPLOSION_SIZE;
+            pos_src.x = (current->frame_explosion / 8) * EXPLOSION_SIZE;
             pos_src.y = 0;
             pos_src.w = EXPLOSION_SIZE;
             pos_src.h = EXPLOSION_SIZE;
 
-            pos_dst.x = current->monster.pos.x + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startX;
-            pos_dst.y = current->monster.pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY;
+            pos_dst.x = current->pos.x + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startX[player_num];
+            pos_dst.y = current->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
             pos_dst.w = EXPLOSION_SIZE;
             pos_dst.h = EXPLOSION_SIZE;
 
-            SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
+            if(pos_dst.x + EXPLOSION_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + EXPLOSION_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
+                SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
         }
 
         current = current->next;
@@ -835,21 +1384,29 @@ void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, Pictures 
 }
 
 
-void updateMovingPlat(Lvl *lvl, Player *player)
+void updateMovingPlat(Lvl *lvl, Player *player[], const int num_players)
 {
     for(int i = 0; i < lvl->num_moving_plat; i++)
     {
         if(lvl->moving_plat[i].direction == RIGHT)
         {
             lvl->moving_plat[i].pos.x += 2;
-            if(lvl->moving_plat[i].is_player_on)
-                player->dirX += 2;
+
+            for(int j = 0; j < num_players; j++)
+            {
+                if(lvl->moving_plat[i].is_player_on[j])
+                    player[j]->dirX += 2;
+            }
         }
         else
         {
-             lvl->moving_plat[i].pos.x -= 2;
-             if(lvl->moving_plat[i].is_player_on)
-                player->dirX -= 2;
+            lvl->moving_plat[i].pos.x -= 2;
+
+            for(int j = 0; j < num_players; j++)
+            {
+                 if(lvl->moving_plat[i].is_player_on[j])
+                    player[j]->dirX -= 2;
+            }
         }
 
 
@@ -861,28 +1418,28 @@ void updateMovingPlat(Lvl *lvl, Player *player)
 }
 
 
-int updateMonsters(Lvl *lvl, Player *player, Sounds *sounds, Input *in)
+int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, Input *in, Fonts *fonts, SDL_Renderer *renderer)
 {
     int index = 0;
-    MonsterList *current = player->monsterList->next;
+    MonsterList *current = lvl->monsterList->next;
 
     while(current != NULL)
     {
-        current->monster.dirX = 0;
-        current->monster.dirY += GRAVITY_SPEED;
+        current->dirX = 0;
+        current->dirY += GRAVITY_SPEED;
 
-        if(current->monster.frame_explosion >= 0)
+        if(current->frame_explosion >= 0)
         {
-            current->monster.frame_explosion++;
-            if(current->monster.frame_explosion >= 56)
+            current->frame_explosion++;
+            if(current->frame_explosion >= 56)
             {
-                current->monster.frame_explosion = -1;
-                if(current->monster.lifes <= 0)
+                current->frame_explosion = -1;
+                if(current->lifes <= 0)
                 {
                     current = current->next;
-                    removeMonsterFromIndex(player->monsterList, index);
+                    removeMonsterFromIndex(lvl->monsterList, index);
 
-                    if(lvl->number == NUM_LEVEL)
+                    if(lvl->number == BOSS_1_LEVEL || lvl->number == BOSS_2_LEVEL)
                         return 1;
 
                     continue;
@@ -891,50 +1448,53 @@ int updateMonsters(Lvl *lvl, Player *player, Sounds *sounds, Input *in)
         }
 
 
-        if(current->monster.lifes > 0)
+        if(current->lifes > 0)
         {
-            if(current->monster.dirY >= MAX_FALL_SPEED)
-                current->monster.dirY = MAX_FALL_SPEED;
+            if(current->dirY >= MAX_FALL_SPEED)
+                current->dirY = MAX_FALL_SPEED;
 
-            if(current->monster.pos.x == current->monster.saveX || checkFall(lvl, player, current))
+            if(current->pos.x == current->saveX || checkFall(lvl, current))
             {
-                if(current->monster.direction == LEFT)
-                    current->monster.direction = RIGHT;
+                if(current->direction == LEFT)
+                    current->direction = RIGHT;
                 else
-                    current->monster.direction = LEFT;
+                    current->direction = LEFT;
             }
 
-            if(current->monster.direction == LEFT)
-                current->monster.dirX -= (lvl->number == NUM_LEVEL) ? 12 : 2;
+            if(current->direction == LEFT)
+                current->dirX -= (lvl->number == BOSS_2_LEVEL) ? 14 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
             else
-                current->monster.dirX += (lvl->number == NUM_LEVEL) ? 12 : 2;
+                current->dirX += (lvl->number == BOSS_2_LEVEL) ? 14 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
 
 
-            current->monster.saveX = current->monster.pos.x;
+            current->saveX = current->pos.x;
 
-            mapCollisionMonster(lvl, player, current, index);
+            mapCollisionMonster(lvl, current, index);
 
-            if(!player->dead)
+            for(int i = 0; i < num_player; i++)
             {
-                int collision = collide(player, current);
-
-                if(collision == 1 || (collision == 2 && player->invicibleFramesLeft > 0))
+                if(!player[i]->dead)
                 {
-                    if(lvl->number < NUM_LEVEL)
-                        player->killed++;
+                    int collision = collide(player[i], current);
 
-                    if(player->invicibleFramesLeft == 0)
+                    if(collision == 1 || (collision == 2 && player[i]->invicibleFramesLeft > 0))
                     {
-                        player->dirY = -JUMP_HEIGHT;
-                        player->can_jump = 1;
-                    }
+                        if(lvl->number != BOSS_1_LEVEL && lvl->number != BOSS_2_LEVEL)
+                            player[i]->killed++;
 
-                    current->monster.lifes--;
-                    current->monster.frame_explosion = 0;
-                    Mix_PlayChannel(-1, sounds->explosion, 0);
+                        if(player[i]->invicibleFramesLeft == 0)
+                        {
+                            player[i]->dirY = -JUMP_HEIGHT;
+                            player[i]->can_jump = 1;
+                        }
+
+                        current->lifes--;
+                        current->frame_explosion = 0;
+                        Mix_PlayChannel(-1, sounds->explosion, 0);
+                    }
+                    else if(collision == 2)
+                        death(player[i], i, sounds, in);
                 }
-                else if(collision == 2)
-                    death(player, sounds, in);
             }
         }
 
@@ -949,16 +1509,16 @@ int updateMonsters(Lvl *lvl, Player *player, Sounds *sounds, Input *in)
 
 int collide(Player *player, MonsterList *currentMonster)
 {
-    if(player->pos.x >= currentMonster->monster.pos.x + currentMonster->monster.pos.w || player->pos.x + player->pos.w <= currentMonster->monster.pos.x || player->pos.y >= currentMonster->monster.pos.y + currentMonster->monster.pos.h || player->pos.y + player->pos.h <= currentMonster->monster.pos.y)
+    if(player->pos.x >= currentMonster->pos.x + currentMonster->pos.w || player->pos.x + player->pos.w <= currentMonster->pos.x || player->pos.y >= currentMonster->pos.y + currentMonster->pos.h || player->pos.y + player->pos.h <= currentMonster->pos.y)
         return 0;
-    if(player->pos.y + player->pos.h <= currentMonster->monster.pos.y + 10)
+    if(player->pos.y + player->pos.h <= currentMonster->pos.y + 10)
         return 1;
 
     return 2;
 }
 
 
-void displayBossLife(SDL_Renderer *renderer, Player *player, Fonts *fonts)
+void displayBossLife(SDL_Renderer *renderer, Lvl *lvl, Fonts *fonts)
 {
     SDL_Color color = {255, 0, 0};
     SDL_Rect pos_dst;
@@ -972,9 +1532,9 @@ void displayBossLife(SDL_Renderer *renderer, Player *player, Fonts *fonts)
     pos_dst.y += pos_dst.h / 2;
     SDL_DestroyTexture(texture);
 
-    if(player->monsterList->next != NULL && player->monsterList->next->monster.lifes > 0)
+    if(lvl->monsterList->next != NULL && lvl->monsterList->next->lifes > 0)
     {
-        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, player->monsterList->next->monster.lifes * 114, 5);
+        texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, lvl->monsterList->next->lifes * 114, 5);
         SDL_SetRenderTarget(renderer, texture);
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         SDL_RenderFillRect(renderer, NULL);
@@ -989,14 +1549,14 @@ void displayBossLife(SDL_Renderer *renderer, Player *player, Fonts *fonts)
 }
 
 
-int checkFall(Lvl *lvl, Player *player, MonsterList *currentMonster)
+int checkFall(Lvl *lvl, MonsterList *currentMonster)
  {
     int x, y;
 
-    if (currentMonster->monster.direction == LEFT)
+    if (currentMonster->direction == LEFT)
     {
-        x = (int) (currentMonster->monster.pos.x + currentMonster->monster.dirX) / TILE_SIZE;
-        y = (int) (currentMonster->monster.pos.y + currentMonster->monster.pos.h - 1) /  TILE_SIZE;
+        x = (int) (currentMonster->pos.x + currentMonster->dirX) / TILE_SIZE;
+        y = (int) (currentMonster->pos.y + currentMonster->pos.h - 1) /  TILE_SIZE;
         if (y < 0)
             y = 1;
         if (y > lvl->height)
@@ -1013,8 +1573,8 @@ int checkFall(Lvl *lvl, Player *player, MonsterList *currentMonster)
     }
     else
     {
-        x = (int)(currentMonster->monster.pos.x + currentMonster->monster.pos.w + currentMonster->monster.dirX) / TILE_SIZE;
-        y = (int)(currentMonster->monster.pos.y + currentMonster->monster.pos.h - 1) / TILE_SIZE;
+        x = (int)(currentMonster->pos.x + currentMonster->pos.w + currentMonster->dirX) / TILE_SIZE;
+        y = (int)(currentMonster->pos.y + currentMonster->pos.h - 1) / TILE_SIZE;
         if (y <= 0)
             y = 1;
         if (y >= lvl->height)
@@ -1036,7 +1596,7 @@ int checkFall(Lvl *lvl, Player *player, MonsterList *currentMonster)
 
 
 
-void wait(unsigned long *time1, unsigned long *time2, int delay)
+void waitGame(unsigned long *time1, unsigned long *time2, int delay)
 {
     *time2 = SDL_GetTicks();
     if(*time2 - *time1 < delay)
@@ -1045,25 +1605,25 @@ void wait(unsigned long *time1, unsigned long *time2, int delay)
 }
 
 
-void centerScrollingOnPlayer(Lvl *lvl, Player *player)
+void centerScrollingOnPlayer(Lvl *lvl, Player *player, int player_num, int num_player)
 {
-    lvl->startX = player->pos.x - (WINDOW_W / 2) + player->pos.w / 2;
+    lvl->startX[player_num] = player->pos.x - (WINDOW_W / 2) + player->pos.w / 2;
 
-    if(lvl->startX < 0)
-        lvl->startX = 0;
-    if(lvl->startX + WINDOW_W >= lvl->maxX)
-        lvl->startX = lvl->maxX - WINDOW_W;
+    if(lvl->startX[player_num] < 0)
+        lvl->startX[player_num] = 0;
+    if(lvl->startX[player_num] + WINDOW_W >= lvl->maxX)
+        lvl->startX[player_num] = lvl->maxX - WINDOW_W;
 
-    lvl->startY = player->pos.y - (WINDOW_H / 2) + player->pos.h / 2;
+    lvl->startY[player_num] = player->pos.y - WINDOW_H / (2 * num_player) + player->pos.h / 2;
 
-    if(lvl->startY < 0)
-        lvl->startY = 0;
-    if(lvl->startY + WINDOW_H >= lvl->maxY)
-        lvl->startY = lvl->maxY - WINDOW_H;
+    if(lvl->startY[player_num] < 0)
+        lvl->startY[player_num] = 0;
+    if(lvl->startY[player_num] + WINDOW_H / num_player >= lvl->maxY)
+        lvl->startY[player_num] = lvl->maxY - WINDOW_H / num_player;
  }
 
 
-void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings)
+int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings, const int num_player, int mode)
 {
     player->dirXmem = player->dirX;
     player->wasOnGround = player->on_ground;
@@ -1135,21 +1695,19 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
                     Mix_PlayChannel(-1, sounds->invicible, 0);
                 }
 
-                if(lvl->map[x2][y1] == CHECKPOINT_NUM)
+                if(lvl->map[x2][y1] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x2 * TILE_SIZE;
                     player->respawnY = y1 * TILE_SIZE - player->pos.h;
-                    lvl->map[x2][y1]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
-                if(lvl->map[x2][y2] == CHECKPOINT_NUM)
+                if(lvl->map[x2][y2] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x2 * TILE_SIZE;
                     player->respawnY = y2 * TILE_SIZE - player->pos.h;
-                    lvl->map[x2][y2]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
@@ -1205,21 +1763,19 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
                     Mix_PlayChannel(-1, sounds->invicible, 0);
                 }
 
-                if(lvl->map[x1][y1] == CHECKPOINT_NUM)
+                if(lvl->map[x1][y1] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x1 * TILE_SIZE;
                     player->respawnY = y1 * TILE_SIZE - player->pos.h;
-                    lvl->map[x1][y1]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
-                if(lvl->map[x1][y2] == CHECKPOINT_NUM)
+                if(lvl->map[x1][y2] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x1 * TILE_SIZE;
                     player->respawnY = y2 * TILE_SIZE - player->pos.h;
-                    lvl->map[x1][y2]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
@@ -1301,21 +1857,19 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
                     Mix_PlayChannel(-1, sounds->invicible, 0);
                 }
 
-                if(lvl->map[x1][y2] == CHECKPOINT_NUM)
+                if(lvl->map[x1][y2] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x1 * TILE_SIZE;
                     player->respawnY = y2 * TILE_SIZE - player->pos.h;
-                    lvl->map[x1][y2]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
-                if(lvl->map[x2][y2] == CHECKPOINT_NUM)
+                if(lvl->map[x2][y2] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x2 * TILE_SIZE;
                     player->respawnY = y2 * TILE_SIZE - player->pos.h;
-                    lvl->map[x2][y2]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
@@ -1347,10 +1901,10 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
                         player->dirY = 0;
                         player->on_ground = 1;
                         player->can_jump = 1;
-                        lvl->moving_plat[j].is_player_on = 1;
+                        lvl->moving_plat[j].is_player_on[player_num] = 1;
                     }
                     else
-                        lvl->moving_plat[j].is_player_on = 0;
+                        lvl->moving_plat[j].is_player_on[player_num] = 0;
                 }
             }
 
@@ -1398,21 +1952,19 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
                     Mix_PlayChannel(-1, sounds->invicible, 0);
                 }
 
-                if(lvl->map[x1][y1] == CHECKPOINT_NUM)
+                if(lvl->map[x1][y1] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x1 * TILE_SIZE;
                     player->respawnY = y1 * TILE_SIZE - player->pos.h;
-                    lvl->map[x1][y1]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
-                if(lvl->map[x2][y1] == CHECKPOINT_NUM)
+                if(lvl->map[x2][y1] == CHECKPOINT_NUM && !player->isCheckpointActive)
                 {
                     player->isCheckpointActive = 1;
                     player->respawnX = x2 * TILE_SIZE;
                     player->respawnY = y1 * TILE_SIZE - player->pos.h;
-                    lvl->map[x2][y1]++;
                     Mix_PlayChannel(-1, sounds->checkpoint, 0);
                 }
 
@@ -1444,186 +1996,182 @@ void mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Sounds
         player->pos.x = 0;
 
     if(player->pos.y > lvl->maxY)
-        death(player, sounds, in);
+        death(player, player_num, sounds, in);
 
     if(player->pos.x + player->pos.w >= lvl->maxX)
     {
-        int lvl_num = lvl->number + 1;
+        player->pos.x = lvl->maxX - player->pos.w - 1;
 
-        if(lvl_num <= NUM_LEVEL)
+        if(lvl->number < NUM_LEVEL)
         {
-            SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, WINDOW_W, WINDOW_H, 32, SDL_PIXELFORMAT_ABGR8888);
-            SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ABGR8888, surface->pixels, surface->pitch);
-            SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
-            SDL_FreeSurface(surface);
-
-            levelFinished(renderer, sounds, fonts, texture);
-            SDL_DestroyTexture(texture);
-
-            freeLevel(lvl, PLAY);
-            loadLevel(renderer, lvl_num, lvl, PLAY, settings);
-            displayLevelName(renderer, pictures, fonts, lvl, in);
-            player->isCheckpointActive = 0;
-            respawn(player);
-            removeAllMonsters(player->monsterList);
+            removeAllMonsters(lvl->monsterList);
+            return 1;
         }
-        else
-            player->pos.x = lvl->maxX - player->pos.w - 1;
     }
+
+    return 0;
 }
 
 
+SDL_Texture* getScreenTexture(SDL_Renderer *renderer)
+{
+    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, WINDOW_W, WINDOW_H, 32, SDL_PIXELFORMAT_ABGR8888);
+    SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ABGR8888, surface->pixels, surface->pitch);
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+
+    return texture;
+}
 
 
-
-void mapCollisionMonster(Lvl *lvl, Player *player, MonsterList *currentMonster, int monsterIndex)
+void mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster, int monsterIndex)
 {
     int i, x1, x2, y1, y2;
 
-    currentMonster->monster.on_ground = 0;
+    currentMonster->on_ground = 0;
 
-    if(currentMonster->monster.pos.h > TILE_SIZE)
+    if(currentMonster->pos.h > TILE_SIZE)
         i = TILE_SIZE;
     else
-        i = currentMonster->monster.pos.h;
+        i = currentMonster->pos.h;
 
     for (;;)
     {
-        x1 = (currentMonster->monster.pos.x + currentMonster->monster.dirX) / TILE_SIZE;
-        x2 = (currentMonster->monster.pos.x + currentMonster->monster.dirX + currentMonster->monster.pos.w - 1) / TILE_SIZE;
+        x1 = (currentMonster->pos.x + currentMonster->dirX) / TILE_SIZE;
+        x2 = (currentMonster->pos.x + currentMonster->dirX + currentMonster->pos.w - 1) / TILE_SIZE;
 
-        y1 = (currentMonster->monster.pos.y) / TILE_SIZE;
-        y2 = (currentMonster->monster.pos.y + i - 1) / TILE_SIZE;
+        y1 = (currentMonster->pos.y) / TILE_SIZE;
+        y2 = (currentMonster->pos.y + i - 1) / TILE_SIZE;
 
 
         if (x1 >= 0 && x2 < lvl->width && y1 >= 0 && y2 < lvl->height)
         {
-            if (currentMonster->monster.dirX > 0)
+            if (currentMonster->dirX > 0)
             {
                 if(lvl->solid[lvl->map[x2][y1]] || lvl->solid[lvl->map[x2][y2]])
                 {
-                    currentMonster->monster.pos.x = x2 * TILE_SIZE;
-                    currentMonster->monster.pos.x -= currentMonster->monster.pos.w + 1;
-                    currentMonster->monster.dirX = 0;
+                    currentMonster->pos.x = x2 * TILE_SIZE;
+                    currentMonster->pos.x -= currentMonster->pos.w + 1;
+                    currentMonster->dirX = 0;
                 }
             }
 
-            else if(currentMonster->monster.dirX < 0)
+            else if(currentMonster->dirX < 0)
             {
                 if (lvl->solid[lvl->map[x1][y1]] || lvl->solid[lvl->map[x1][y2]])
                 {
-                    currentMonster->monster.pos.x = (x1 + 1) * TILE_SIZE;
-                    player->dirX = 0;
+                    currentMonster->pos.x = (x1 + 1) * TILE_SIZE;
+                    currentMonster->dirX = 0;
                 }
             }
         }
 
-        if(i == currentMonster->monster.pos.h)
+        if(i == currentMonster->pos.h)
             break;
 
         i += TILE_SIZE;
 
-        if(i > currentMonster->monster.pos.h)
-            i = currentMonster->monster.pos.h;
+        if(i > currentMonster->pos.h)
+            i = currentMonster->pos.h;
     }
 
 
-    if(currentMonster->monster.pos.w > TILE_SIZE)
+    if(currentMonster->pos.w > TILE_SIZE)
         i = TILE_SIZE;
     else
-        i = currentMonster->monster.pos.w;
+        i = currentMonster->pos.w;
 
 
     for (;;)
     {
-        x1 = (currentMonster->monster.pos.x) / TILE_SIZE;
-        x2 = (currentMonster->monster.pos.x + i) / TILE_SIZE;
+        x1 = (currentMonster->pos.x) / TILE_SIZE;
+        x2 = (currentMonster->pos.x + i) / TILE_SIZE;
 
-        y1 = (currentMonster->monster.pos.y + currentMonster->monster.dirY) / TILE_SIZE;
-        y2 = (currentMonster->monster.pos.y + currentMonster->monster.dirY + currentMonster->monster.pos.h) / TILE_SIZE;
+        y1 = (currentMonster->pos.y + currentMonster->dirY) / TILE_SIZE;
+        y2 = (currentMonster->pos.y + currentMonster->dirY + currentMonster->pos.h) / TILE_SIZE;
 
         if (x1 >= 0 && x2 < lvl->width && y1 >= 0 && y2 < lvl->height)
         {
-            if(currentMonster->monster.dirY > 0)
+            if(currentMonster->dirY > 0)
             {
                 if(lvl->solid[lvl->map[x1][y2]] || lvl->solid[lvl->map[x2][y2]])
                 {
-                    currentMonster->monster.pos.y = y2 * TILE_SIZE;
-                    currentMonster->monster.pos.y -= currentMonster->monster.pos.h;
-                    currentMonster->monster.dirY = 0;
-                    currentMonster->monster.on_ground = 1;
+                    currentMonster->pos.y = y2 * TILE_SIZE;
+                    currentMonster->pos.y -= currentMonster->pos.h;
+                    currentMonster->dirY = 0;
+                    currentMonster->on_ground = 1;
                 }
             }
-            else if (player->dirY < 0)
+            else if (currentMonster->dirY < 0)
             {
                 if (lvl->solid[lvl->map[x1][y1]] || lvl->solid[lvl->map[x2][y1]])
                 {
-                    currentMonster->monster.pos.y = (y1 + 1) * TILE_SIZE;
-                    player->dirY = 0;
+                    currentMonster->pos.y = (y1 + 1) * TILE_SIZE;
+                    currentMonster->dirY = 0;
                 }
             }
         }
 
-        if(i == currentMonster->monster.pos.w)
+        if(i == currentMonster->pos.w)
             break;
 
         i += TILE_SIZE;
 
-        if(i > currentMonster->monster.pos.w)
-            i = currentMonster->monster.pos.w;
+        if(i > currentMonster->pos.w)
+            i = currentMonster->pos.w;
     }
 
+    currentMonster->pos.x += currentMonster->dirX;
+    currentMonster->pos.y += currentMonster->dirY;
 
-    currentMonster->monster.pos.x += currentMonster->monster.dirX;
-    currentMonster->monster.pos.y += currentMonster->monster.dirY;
+    if(currentMonster->pos.x < 0)
+        currentMonster->pos.x = 0;
 
+    if(currentMonster->pos.y > lvl->maxY)
+        removeMonsterFromIndex(lvl->monsterList, monsterIndex);
 
-    if(currentMonster->monster.pos.x < 0)
-        currentMonster->monster.pos.x = 0;
-
-    if(currentMonster->monster.pos.y > lvl->maxY)
-        removeMonsterFromIndex(player->monsterList, monsterIndex);
-
-    if(currentMonster->monster.pos.x + currentMonster->monster.pos.w >= lvl->maxX)
-        currentMonster->monster.pos.x = lvl->maxX - currentMonster->monster.pos.w - 1;
+    if(currentMonster->pos.x + currentMonster->pos.w >= lvl->maxX)
+        currentMonster->pos.x = lvl->maxX - currentMonster->pos.w - 1;
 }
 
 
 
 
-
-
-void death(Player *player, Sounds *sounds, Input *in)
+void death(Player *player, int player_num, Sounds *sounds, Input *in)
 {
     player->lifes--;
     player->dead = 1;
     player->frame_explosion = 0;
     Mix_PlayChannel(-1, sounds->death, 0);
     Mix_PlayChannel(-1, sounds->explosion, 0);
-    if(in->controller.haptic != NULL)
-        SDL_HapticRumblePlay(in->controller.haptic, 0.25, 500);
+    if(in->controller[player_num].haptic != NULL)
+        SDL_HapticRumblePlay(in->controller[player_num].haptic, 0.25, 500);
 }
 
 
-void createMonster(Player *player, const int x, const int y, const int lifes)
+void createMonster(Lvl *lvl, int x, int y, int lifes, int can_jump)
 {
     MonsterList *monsterList = malloc(sizeof(MonsterList));
     initMonsterList(monsterList);
 
-    monsterList->monster.direction = LEFT;
-    monsterList->monster.pos.x = x;
-    monsterList->monster.pos.y = y;
-    monsterList->monster.pos.w = TILE_SIZE;
-    monsterList->monster.pos.h = TILE_SIZE;
-    monsterList->monster.on_ground = 0;
-    monsterList->monster.frame_explosion = -1;
-    monsterList->monster.lifes = lifes;
+    monsterList->direction = LEFT;
+    monsterList->pos.x = x;
+    monsterList->pos.y = y;
+    monsterList->pos.w = TILE_SIZE;
+    monsterList->pos.h = TILE_SIZE;
+    monsterList->on_ground = 0;
+    monsterList->frame_explosion = -1;
+    monsterList->lifes = lifes;
+    monsterList->dirX = 0;
+    monsterList->dirY = 0;
+    monsterList->saveX = x - 1;
+    monsterList->saveY = y - 1;
 
-    insertMonster(player->monsterList, monsterList);
+    insertMonster(lvl->monsterList, monsterList);
 }
 
 
-void createMovingPlat(Lvl *lvl, int x, int y)
+void createMovingPlat(Lvl *lvl, int x, int y, const int num_player)
 {
     if(lvl->num_moving_plat < MAX_MOVING_PLAT)
     {
@@ -1634,14 +2182,15 @@ void createMovingPlat(Lvl *lvl, int x, int y)
 
         lvl->moving_plat[lvl->num_moving_plat].beginX = x;
         lvl->moving_plat[lvl->num_moving_plat].beginY = y;
-        lvl->moving_plat[lvl->num_moving_plat].is_player_on = 0;
+        lvl->moving_plat[lvl->num_moving_plat].is_player_on[0] = 0;
+        lvl->moving_plat[lvl->num_moving_plat].is_player_on[1] = 0;
         lvl->moving_plat[lvl->num_moving_plat].direction = RIGHT;
         lvl->moving_plat[lvl->num_moving_plat].endX = -1;
         lvl->moving_plat[lvl->num_moving_plat].endY = y;
 
-        while(lvl->moving_plat[lvl->num_moving_plat].endX == -1)
+        while(lvl->moving_plat[lvl->num_moving_plat].endX == -1 && x < lvl->maxX)
         {
-            x++;
+            x += TILE_SIZE;
             if(lvl->map[x / TILE_SIZE][y / TILE_SIZE] == MOVING_PLAT_END_NUM)
                 lvl->moving_plat[lvl->num_moving_plat].endX = x;
         }
@@ -2022,6 +2571,21 @@ int checkSlope(Lvl *lvl, Player *player)
             player->wasOnSlope = 0;
 
         return 1;
+    }
+
+    return 0;
+}
+
+
+
+int receive_thread(void *data)
+{
+    unsigned long time1 = 0, time2 = 0;
+
+    while(receive)
+    {
+        receivePos((Net*) data, &other_packet);
+        waitGame(&time1, &time2, DELAY_GAME);
     }
 
     return 0;

@@ -26,8 +26,10 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
         if(KEY_UP_MENU)
         {
             in->key[SDL_SCANCODE_UP] = 0;
-            in->controller.hat[0] = SDL_HAT_CENTERED;
-            in->controller.axes[1] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[1] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[1] = 0;
 
             if(selected > MODE)
                 selected--;
@@ -35,8 +37,10 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
         if(KEY_DOWN_MENU)
         {
             in->key[SDL_SCANCODE_DOWN] = 0;
-            in->controller.hat[0] = SDL_HAT_CENTERED;
-            in->controller.axes[1] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[1] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[1] = 0;
 
             if(selected < SFX_VOLUME)
                 selected++;
@@ -44,7 +48,8 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
         if(KEY_ESCAPE)
         {
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
             escape = 1;
         }
         if(KEY_ENTER_MENU)
@@ -52,7 +57,8 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
-            in->controller.buttons[0] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
 
             if(selected == MODE)
             {
@@ -72,21 +78,23 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
             destroyOptionsTexts(texture);
             loadOptionsTexts(renderer, fonts, settings, texture, pos_dst);
         }
-        if(KEY_LEFT_GAME)
+        if(KEY_LEFT_MENU)
         {
             in->key[SDL_SCANCODE_LEFT] = 0;
-            in->controller.hat[0] = SDL_HAT_CENTERED;
-            in->controller.axes[0] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[0] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[0] = 0;
 
 
             if(selected == MUSIC_VOLUME && settings->music_volume > 0)
             {
-                settings->music_volume--;
+                settings->music_volume -= 16;
                 Mix_VolumeMusic(settings->music_volume);
             }
             else if(selected == SFX_VOLUME && settings->sfx_volume > 0)
             {
-                settings->sfx_volume--;
+                settings->sfx_volume -= 16;
                 setSfxVolume(sounds, settings->sfx_volume);
                 Mix_PlayChannel(-1, sounds->coin, 0);
             }
@@ -95,20 +103,22 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
             destroyOptionsTexts(texture);
             loadOptionsTexts(renderer, fonts, settings, texture, pos_dst);
         }
-        if(KEY_RIGHT_GAME)
+        if(KEY_RIGHT_MENU)
         {
             in->key[SDL_SCANCODE_RIGHT] = 0;
-            in->controller.hat[0] = SDL_HAT_CENTERED;
-            in->controller.axes[0] = 0;
+            in->controller[0].hat[0] = SDL_HAT_CENTERED;
+            in->controller[0].axes[0] = 0;
+            in->controller[1].hat[0] = SDL_HAT_CENTERED;
+            in->controller[1].axes[0] = 0;
 
             if(selected == MUSIC_VOLUME && settings->music_volume < MIX_MAX_VOLUME)
             {
-                settings->music_volume++;
+                settings->music_volume += 16;
                 Mix_VolumeMusic(settings->music_volume);
             }
             else if(selected == SFX_VOLUME && settings->sfx_volume < MIX_MAX_VOLUME)
             {
-                settings->sfx_volume++;
+                settings->sfx_volume += 16;
                 setSfxVolume(sounds, settings->sfx_volume);
                 Mix_PlayChannel(-1, sounds->coin, 0);
             }
@@ -137,7 +147,7 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
 
         SDL_RenderPresent(renderer);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
     }
 
     transition(renderer, pictures->title, NUM_OPTIONS, texture, pos_dst, EXITING, 0);

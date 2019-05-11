@@ -16,7 +16,6 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
     loadLevel(renderer, 1, lvl, EDIT, settings);
 
 
-
     while(!escape)
     {
         updateEvents(in);
@@ -26,37 +25,38 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
         if(KEY_ESCAPE)
         {
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
             escape = 1;
         }
-        if(KEY_LEFT_GAME)
+        if(KEY_LEFT_EDITOR)
         {
-            lvl->startX -= TILE_SIZE;
-            if(lvl->startX < 0)
-                lvl->startX = 0;
+            lvl->startX[0] -= TILE_SIZE;
+            if(lvl->startX[0] < 0)
+                lvl->startX[0] = 0;
         }
-        if(KEY_RIGHT_GAME)
+        if(KEY_RIGHT_EDITOR)
         {
-            lvl->startX += TILE_SIZE;
-            if (lvl->startX + WINDOW_W >= lvl->maxX)
-                lvl->startX = lvl->maxX - WINDOW_W;
+            lvl->startX[0] += TILE_SIZE;
+            if (lvl->startX[0] + WINDOW_W >= lvl->maxX)
+                lvl->startX[0] = lvl->maxX - WINDOW_W;
         }
-        if(KEY_UP_MENU)
+        if(KEY_UP_EDITOR)
         {
-            lvl->startY -= TILE_SIZE;
-            if(lvl->startY < 0)
-                lvl->startY = 0;
+            lvl->startY[0] -= TILE_SIZE;
+            if(lvl->startY[0] < 0)
+                lvl->startY[0] = 0;
         }
-        if(KEY_DOWN_MENU)
+        if(KEY_DOWN_EDITOR)
         {
-            lvl->startY += TILE_SIZE;
-            if (lvl->startY + WINDOW_H >= lvl->maxY)
-                lvl->startY = lvl->maxY - WINDOW_H;
+            lvl->startY[0] += TILE_SIZE;
+            if (lvl->startY[0] + WINDOW_H >= lvl->maxY)
+                lvl->startY[0] = lvl->maxY - WINDOW_H;
         }
         if(in->mousebutton[SDL_BUTTON_LEFT])
-            lvl->map[(lvl->startX + in->mouseX) / TILE_SIZE][(lvl->startY + in->mouseY) / TILE_SIZE] = selected_tile;
+            lvl->map[(lvl->startX[0] + in->mouseX) / TILE_SIZE][(lvl->startY[0] + in->mouseY) / TILE_SIZE] = selected_tile;
         if(in->mousebutton[SDL_BUTTON_RIGHT])
-            lvl->map[(lvl->startX + in->mouseX) / TILE_SIZE][(lvl->startY + in->mouseY) / TILE_SIZE] = 0;
+            lvl->map[(lvl->startX[0] + in->mouseX) / TILE_SIZE][(lvl->startY[0] + in->mouseY) / TILE_SIZE] = 0;
         if(in->wheelY > 0)
         {
             selected_tile++;
@@ -97,13 +97,13 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
 
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, lvl->sky, NULL, NULL);
-        displayGame(renderer, pictures, lvl, NULL, 0, EDIT);
+        displayGame(renderer, pictures, lvl, NULL, 0, 0, EDIT, 1);
         displayHighligth(renderer, in, lvl);
         displayEditorHUD(renderer, fonts);
         displaySelectedTile(renderer, lvl, in, pictures, selected_tile);
         SDL_RenderPresent(renderer);
 
-        if(KEY_LEFT_GAME || KEY_RIGHT_GAME || KEY_DOWN_MENU || KEY_UP_MENU)
+        if(KEY_LEFT_EDITOR || KEY_RIGHT_EDITOR || KEY_DOWN_EDITOR || KEY_UP_EDITOR)
             SDL_Delay(30);
     }
 
@@ -206,8 +206,8 @@ void displayHighligth(SDL_Renderer *renderer, Input *in, Lvl *lvl)
     SDL_SetRenderTarget(renderer, NULL);
 
     SDL_Rect pos_dst;
-    pos_dst.x = ((in->mouseX  + lvl->startX % TILE_SIZE) / TILE_SIZE) * TILE_SIZE + (lvl->startX % TILE_SIZE) * -1;
-    pos_dst.y = ((in->mouseY  + lvl->startY % TILE_SIZE) / TILE_SIZE) * TILE_SIZE + (lvl->startY % TILE_SIZE) * -1;
+    pos_dst.x = ((in->mouseX  + lvl->startX[0] % TILE_SIZE) / TILE_SIZE) * TILE_SIZE + (lvl->startX[0] % TILE_SIZE) * -1;
+    pos_dst.y = ((in->mouseY  + lvl->startY[0] % TILE_SIZE) / TILE_SIZE) * TILE_SIZE + (lvl->startY[0] % TILE_SIZE) * -1;
     pos_dst.w = TILE_SIZE;
     pos_dst.h = TILE_SIZE;
     SDL_RenderCopy(renderer, highligthed, NULL, &pos_dst);

@@ -54,6 +54,7 @@ Pictures* loadPictures(SDL_Renderer *renderer)
 
     pictures->HUDlife = IMG_LoadTexture(renderer, "./data/hud/life.bmp");
     pictures->HUDcoin = IMG_LoadTexture(renderer, "./data/hud/coin.png");
+    pictures->HUDtimer = IMG_LoadTexture(renderer, "./data/hud/timer.png");
     pictures->gameover = IMG_LoadTexture(renderer, "./data/background/gameover.png");
     pictures->title = IMG_LoadTexture(renderer, "./data/background/title.jpg");
     pictures->explosion = IMG_LoadTexture(renderer, "./data/tilesets/explosion.png");
@@ -89,11 +90,25 @@ Settings* loadSettings()
 
     FILE *file = fopen("./start.ini", "r");
     if(file == NULL)
-        exit(EXIT_FAILURE);
+    {
+        #ifdef __linux__
+            settings->fullscreen = 0;
+        #else
+            settings->fullscreen = 1;
+        #endif
 
-    fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume);
+        settings->music_volume = 128;
+        settings->sfx_volume = 128;
+    }
+    else
+    {
+        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume);
+        fclose(file);
+    }
 
-    fclose(file);
+
+
+    settings->controls = loadControls();
 
     return settings;
 }
@@ -107,8 +122,9 @@ void saveSettings(Settings *settings)
         exit(EXIT_FAILURE);
 
     fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", settings->fullscreen, settings->music_volume, settings->sfx_volume);
-
     fclose(file);
+
+    saveControls(settings->controls);
 }
 
 
@@ -120,16 +136,23 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
 {
     FILE *file = fopen("./scores.bin", "rb");
     if(file == NULL)
-        exit(EXIT_FAILURE);
-
-    for(int i = 0; i < NUM_SCORES; i++)
     {
-        fread(&scores[i], sizeof(scores[i]), 1, file);
-        fread(names[i], sizeof(names[i]), 1, file);
+        for(int i = 0; i < NUM_SCORES; i++)
+        {
+            scores[i] = 0;
+            names[i][0] = '\0';
+        }
     }
+    else
+    {
+        for(int i = 0; i < NUM_SCORES; i++)
+        {
+            fread(&scores[i], sizeof(scores[i]), 1, file);
+            fread(names[i], sizeof(names[i]), 1, file);
+        }
 
-
-    fclose(file);
+        fclose(file);
+    }
 }
 
 
@@ -150,6 +173,74 @@ void saveScores(unsigned long scores[], char names[][NAME_LEN])
 
     fclose(file);
 }
+
+
+void loadTimes(unsigned long times[])
+{
+    FILE *file = fopen("./times.bin", "rb");
+    if(file == NULL)
+    {
+        for(int i = 0; i < NUM_TIMES; i++)
+            times[i] = 0;
+    }
+    else
+    {
+        for(int i = 0; i < NUM_TIMES; i++)
+            fread(&times[i], sizeof(times[i]), 1, file);
+
+        fclose(file);
+    }
+}
+
+void saveTimes(unsigned long times[])
+{
+    FILE *file = fopen("./times.bin", "wb");
+    if(file == NULL)
+        exit(EXIT_FAILURE);
+
+    for(int i = 0; i < NUM_TIMES; i++)
+        fwrite(&times[i], sizeof(times[i]), 1, file);
+
+    fclose(file);
+}
+
+
+Controls* loadControls()
+{
+    Controls *controls = malloc(sizeof(Controls) * 2);
+    if(controls == NULL)
+        exit(EXIT_FAILURE);
+
+    FILE *file = fopen("./controls.ini", "r");
+    if(file == NULL)
+    {
+        controls[0].left = SDL_SCANCODE_A;
+        controls[0].right = SDL_SCANCODE_D;
+        controls[0].jump = SDL_SCANCODE_W;
+
+        controls[1].left = SDL_SCANCODE_LEFT;
+        controls[1].right = SDL_SCANCODE_RIGHT;
+        controls[1].jump = SDL_SCANCODE_UP;
+    }
+    else
+    {
+        fscanf(file, "[Player 1]\nLeft=%d\nRight=%d\nJump=%d\n\n[Player 2]\nLeft=%d\nRight=%d\nJump=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[1].left, &controls[1].right, &controls[1].jump);
+        fclose(file);
+    }
+
+    return controls;
+}
+
+void saveControls(Controls *controls)
+{
+    FILE *file = fopen("./controls.ini", "w");
+    if(file == NULL)
+        exit(EXIT_FAILURE);
+
+    fprintf(file, "[Player 1]\nLeft=%d\nRight=%d\nJump=%d\n\n[Player 2]\nLeft=%d\nRight=%d\nJump=%d\n", controls[0].left, controls[0].right, controls[0].jump, controls[1].left, controls[1].right, controls[1].jump);
+    fclose(file);
+}
+
 
 
 
@@ -190,9 +281,11 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
             in->key[SDL_SCANCODE_KP_ENTER] = 0;
-            in->controller.buttons[0] = 0;
+            in->controller[0].buttons[0] = 0;
+            in->controller[1].buttons[0] = 0;
             in->key[SDL_SCANCODE_ESCAPE] = 0;
-            in->controller.buttons[6] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
             escape = 1;
         }
 
@@ -204,7 +297,7 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 
         SDL_RenderPresent(renderer);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
     }
 
     transition(renderer, pictures->title, 11, texture, pos_dst, EXITING, 0);
@@ -297,7 +390,7 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
         if(str[0] != '\0')
             SDL_DestroyTexture(texture[2]);
 
-        wait(&time1, &time2, DELAY_GAME);
+        waitGame(&time1, &time2, DELAY_GAME);
         frame++;
         frame = frame % 60;
     }
@@ -316,4 +409,27 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
 }
 
 
+
+void updateTimes(const int level_num, const unsigned long player_time)
+{
+    unsigned long times[NUM_TIMES];
+    loadTimes(times);
+
+    int i = level_num * 5 - 1;
+    while(i >= (level_num - 1) * 5 && (player_time < times[i] || times[i] == 0))
+    {
+        if(i == level_num * 5 - 1)
+            times[i] = player_time;
+        else
+        {
+            unsigned long time = times[i];
+            times[i] = player_time;
+            times[i + 1] = time;
+        }
+
+        i--;
+    }
+
+    saveTimes(times);
+}
 
