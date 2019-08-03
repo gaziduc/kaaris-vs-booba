@@ -3,7 +3,7 @@
 #include "game.h"
 #include "editor.h"
 
-void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings)
+void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings, FPSmanager *fps)
 {
     int escape = 0;
     int selected_tile = 1;
@@ -14,7 +14,6 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
         exit(EXIT_FAILURE);
 
     loadLevel(renderer, 1, lvl, EDIT, settings);
-
 
     while(!escape)
     {
@@ -57,6 +56,8 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
             lvl->map[(lvl->startX[0] + in->mouseX) / TILE_SIZE][(lvl->startY[0] + in->mouseY) / TILE_SIZE] = selected_tile;
         if(in->mousebutton[SDL_BUTTON_RIGHT])
             lvl->map[(lvl->startX[0] + in->mouseX) / TILE_SIZE][(lvl->startY[0] + in->mouseY) / TILE_SIZE] = 0;
+        if(in->mousebutton[SDL_BUTTON_MIDDLE])
+            selected_tile = lvl->map[(lvl->startX[0] + in->mouseX) / TILE_SIZE][(lvl->startY[0] + in->mouseY) / TILE_SIZE];
         if(in->wheelY > 0)
         {
             selected_tile++;
@@ -99,12 +100,11 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
         SDL_RenderCopy(renderer, lvl->sky, NULL, NULL);
         displayGame(renderer, pictures, lvl, NULL, 0, 0, EDIT, 1);
         displayHighligth(renderer, in, lvl);
-        displayEditorHUD(renderer, fonts);
+        displayEditorHUD(renderer, fonts, lvl);
         displaySelectedTile(renderer, lvl, in, pictures, selected_tile);
-        SDL_RenderPresent(renderer);
 
-        if(KEY_LEFT_EDITOR || KEY_RIGHT_EDITOR || KEY_DOWN_EDITOR || KEY_UP_EDITOR)
-            SDL_Delay(30);
+        SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
     }
 
 
@@ -151,26 +151,20 @@ void saveMap(Lvl *lvl)
 
     FILE *file = NULL;
 
-    sprintf(str, "./data/maps/map_%d.txt", lvl->number);
-    file = fopen(str, "r+");
+    sprintf(str, "data/maps/map_%d.txt", lvl->number);
+    file = fopen(str, "w");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
     rewind(file);
 
-    // Jump to line 13
-    for(int i = 0; i < 12; i++)
-        fgets(str, sizeof(str), file);
+    fprintf(file, "[METADATA]\nname=%s\nwidth=%d\nheight=%d\nsky=%s\ntileset=%s\ncollision=%s\nmusic=%s\nweather=%s\nweather_num_elm=%d\nweather_dir_x=[%d,%d]\nweather_dir_y=[%d,%d]\nin_water=%d\n\n[LEVEL]\n", lvl->name, lvl->width, lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, lvl->weather->num_elm, lvl->weather->dirXmin, lvl->weather->dirXmax, lvl->weather->dirYmin, lvl->weather->dirYmax, lvl->in_water);
 
     for(int y = 0; y < lvl->height; y++)
     {
         for(int x = 0; x < lvl->width; x++)
-        {
-            fseek(file, 0, SEEK_CUR);
             fputc(lvl->map[x][y] + '0', file);
-        }
 
-        fseek(file, 0, SEEK_CUR);
         fputc('\n', file);
     }
 
@@ -180,16 +174,24 @@ void saveMap(Lvl *lvl)
 
 
 
-void displayEditorHUD(SDL_Renderer *renderer, Fonts *fonts)
+void displayEditorHUD(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl)
 {
     SDL_Color color = {255, 0, 0};
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Se déplacer : touches fléchées", color, 15, 10);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Changer tile : molette souris", color, 15, 30);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Poser tile : clic gauche", color, 15, 50);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Effacer tile : clic droit", color, 15, 70);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Niveau suivant/précédent : Page up/down", color, 15, 90);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Sauvegarder : S", color, 15, 110);
-    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Quitter : Echap", color, 15, 130);
+    char str[100] = "";
+
+    sprintf(str, "NIVEAU %d", lvl->number);
+    BlitRenderTextBlended(renderer, fonts->ocraext_message, str, color, 15, 10);
+
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Se déplacer : touches fléchées", color, 15, 50);
+
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Changer tile : molette souris", color, 15, 85);
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Poser tile : clic gauche", color, 15, 105);
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Effacer tile : clic droit", color, 15, 125);
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Basculer vers tile pointée : clic milieu", color, 15, 145);
+
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Niveau suivant/précédent : Page up/down", color, 15, 180);
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Sauvegarder : S", color, 15, 200);
+    BlitRenderTextBlended(renderer, fonts->ocraext_editorHUD, "Quitter : Echap", color, 15, 220);
 }
 
 
@@ -199,8 +201,8 @@ void displayEditorHUD(SDL_Renderer *renderer, Fonts *fonts)
 void displayHighligth(SDL_Renderer *renderer, Input *in, Lvl *lvl)
 {
     SDL_Texture *highligthed = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TILE_SIZE, TILE_SIZE);
-    SDL_SetTextureBlendMode(highligthed, SDL_BLENDMODE_BLEND);
     SDL_SetRenderTarget(renderer, highligthed);
+    SDL_SetTextureBlendMode(highligthed, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 255, 0, 255, 128);
     SDL_RenderFillRect(renderer, NULL);
     SDL_SetRenderTarget(renderer, NULL);

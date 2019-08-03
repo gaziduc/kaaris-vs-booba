@@ -3,6 +3,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL2_framerate.h>
 #include "data.h"
 #include "game.h"
 #include "transition.h"
@@ -13,11 +14,13 @@ Fonts* loadFonts()
     if(fonts == NULL)
         exit(EXIT_FAILURE);
 
-    fonts->ocraext_title = TTF_OpenFont("./data/fonts/ocraext.ttf", 60);
-    fonts->ocraext_score = TTF_OpenFont("./data/fonts/ocraext.ttf", 35);
-    fonts->ocraext_message = TTF_OpenFont("./data/fonts/ocraext.ttf", 25);
-    fonts->ocraext_commands = TTF_OpenFont("./data/fonts/ocraext.ttf", 20);
-    fonts->ocraext_editorHUD = TTF_OpenFont("./data/fonts/ocraext.ttf", 15);
+    fonts->preview_title = TTF_OpenFont("data/fonts/preview.otf", 65);
+    fonts->preview_intro = TTF_OpenFont("data/fonts/preview.otf", 25);
+    fonts->ocraext_score = TTF_OpenFont("data/fonts/ocraext.ttf", 35);
+    fonts->ocraext_message = TTF_OpenFont("data/fonts/ocraext.ttf", 25);
+    fonts->ocraext_commands = TTF_OpenFont("data/fonts/ocraext.ttf", 20);
+    fonts->ocraext_editorHUD = TTF_OpenFont("data/fonts/ocraext.ttf", 16);
+    fonts->ocraext_version = TTF_OpenFont("data/fonts/ocraext.ttf", 14);
 
     return fonts;
 }
@@ -52,12 +55,14 @@ Pictures* loadPictures(SDL_Renderer *renderer)
     if(pictures == NULL)
         exit(EXIT_FAILURE);
 
-    pictures->HUDlife = IMG_LoadTexture(renderer, "./data/hud/life.bmp");
-    pictures->HUDcoin = IMG_LoadTexture(renderer, "./data/hud/coin.png");
-    pictures->HUDtimer = IMG_LoadTexture(renderer, "./data/hud/timer.png");
-    pictures->gameover = IMG_LoadTexture(renderer, "./data/background/gameover.png");
-    pictures->title = IMG_LoadTexture(renderer, "./data/background/title.jpg");
-    pictures->explosion = IMG_LoadTexture(renderer, "./data/tilesets/explosion.png");
+    pictures->HUDlife = IMG_LoadTexture(renderer, "data/gfx/life.bmp");
+    pictures->HUDcoin = IMG_LoadTexture(renderer, "data/gfx/coin.png");
+    pictures->HUDtimer = IMG_LoadTexture(renderer, "data/gfx/timer.png");
+    pictures->title = IMG_LoadTexture(renderer, "data/gfx/title.jpg");
+    pictures->explosion = IMG_LoadTexture(renderer, "data/gfx/explosion.png");
+    pictures->bullet_left = IMG_LoadTexture(renderer, "data/gfx/bulletleft.bmp");
+    pictures->bullet_right = IMG_LoadTexture(renderer, "data/gfx/bulletright.bmp");
+    pictures->boss = IMG_LoadTexture(renderer, "data/gfx/booba.bmp");
 
     return pictures;
 }
@@ -67,16 +72,19 @@ Sounds* loadSounds()
 {
     Sounds *sounds = malloc(sizeof(Sounds));
 
-    sounds->death = Mix_LoadWAV("./data/sfx/death.wav");
-    sounds->bumper = Mix_LoadWAV("./data/sfx/bumper.wav");
-    sounds->jump = Mix_LoadWAV("./data/sfx/jump.wav");
-    sounds->life = Mix_LoadWAV("./data/sfx/life.wav");
-    sounds->coin = Mix_LoadWAV("./data/sfx/coin.wav");
-    sounds->explosion = Mix_LoadWAV("./data/sfx/explosion.wav");
-    sounds->checkpoint = Mix_LoadWAV("./data/sfx/checkpoint.wav");
-    sounds->text = Mix_LoadWAV("./data/sfx/text.wav");
-    sounds->invicible = Mix_LoadWAV("./data/sfx/invicible.wav");
-    sounds->complete = Mix_LoadWAV("./data/sfx/complete.wav");
+    sounds->death = Mix_LoadWAV("data/sfx/death.wav");
+    sounds->bumper = Mix_LoadWAV("data/sfx/bumper.wav");
+    sounds->jump = Mix_LoadWAV("data/sfx/jump.wav");
+    sounds->life = Mix_LoadWAV("data/sfx/life.wav");
+    sounds->coin = Mix_LoadWAV("data/sfx/coin.wav");
+    sounds->explosion = Mix_LoadWAV("data/sfx/explosion.wav");
+    sounds->checkpoint = Mix_LoadWAV("data/sfx/checkpoint.wav");
+    sounds->invicible = Mix_LoadWAV("data/sfx/invicible.wav");
+    sounds->complete = Mix_LoadWAV("data/sfx/complete.wav");
+    sounds->select = Mix_LoadWAV("data/sfx/select.wav");
+    sounds->enter = Mix_LoadWAV("data/sfx/enter.wav");
+    sounds->gun = Mix_LoadWAV("data/sfx/gun.wav");
+    sounds->linefeed = Mix_LoadWAV("data/sfx/linefeed.wav");
 
     return sounds;
 }
@@ -88,25 +96,19 @@ Settings* loadSettings()
     if(settings == NULL)
         exit(EXIT_FAILURE);
 
-    FILE *file = fopen("./start.ini", "r");
+    FILE *file = fopen("settings.ini", "r");
     if(file == NULL)
     {
-        #ifdef __linux__
-            settings->fullscreen = 0;
-        #else
-            settings->fullscreen = 1;
-        #endif
-
+        settings->fullscreen = 1;
         settings->music_volume = 128;
         settings->sfx_volume = 128;
+        settings->haptic = 1;
     }
     else
     {
-        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume);
+        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume, &settings->haptic);
         fclose(file);
     }
-
-
 
     settings->controls = loadControls();
 
@@ -117,11 +119,11 @@ Settings* loadSettings()
 
 void saveSettings(Settings *settings)
 {
-    FILE *file = fopen("./start.ini", "w");
+    FILE *file = fopen("settings.ini", "w");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\n", settings->fullscreen, settings->music_volume, settings->sfx_volume);
+    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\n", settings->fullscreen, settings->music_volume, settings->sfx_volume, settings->haptic);
     fclose(file);
 
     saveControls(settings->controls);
@@ -134,7 +136,7 @@ void saveSettings(Settings *settings)
 
 void loadScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("./scores.bin", "rb");
+    FILE *file = fopen("scores.bin", "rb");
     if(file == NULL)
     {
         for(int i = 0; i < NUM_SCORES; i++)
@@ -160,7 +162,7 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
 
 void saveScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("./scores.bin", "wb");
+    FILE *file = fopen("scores.bin", "wb");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -177,7 +179,7 @@ void saveScores(unsigned long scores[], char names[][NAME_LEN])
 
 void loadTimes(unsigned long times[])
 {
-    FILE *file = fopen("./times.bin", "rb");
+    FILE *file = fopen("times.bin", "rb");
     if(file == NULL)
     {
         for(int i = 0; i < NUM_TIMES; i++)
@@ -194,7 +196,7 @@ void loadTimes(unsigned long times[])
 
 void saveTimes(unsigned long times[])
 {
-    FILE *file = fopen("./times.bin", "wb");
+    FILE *file = fopen("times.bin", "wb");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -211,46 +213,53 @@ Controls* loadControls()
     if(controls == NULL)
         exit(EXIT_FAILURE);
 
-    FILE *file = fopen("./controls.ini", "r");
+    FILE *file = fopen("controls.ini", "r");
     if(file == NULL)
-    {
-        controls[0].left = SDL_SCANCODE_A;
-        controls[0].right = SDL_SCANCODE_D;
-        controls[0].jump = SDL_SCANCODE_W;
-
-        controls[1].left = SDL_SCANCODE_LEFT;
-        controls[1].right = SDL_SCANCODE_RIGHT;
-        controls[1].jump = SDL_SCANCODE_UP;
-    }
+        getDefaultControls(controls);
     else
     {
-        fscanf(file, "[Player 1]\nLeft=%d\nRight=%d\nJump=%d\n\n[Player 2]\nLeft=%d\nRight=%d\nJump=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[1].left, &controls[1].right, &controls[1].jump);
+        fscanf(file, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[0].power_up, &controls[1].left, &controls[1].right, &controls[1].jump, &controls[1].power_up);
         fclose(file);
     }
 
     return controls;
 }
 
+
+
+void getDefaultControls(Controls *controls)
+{
+    controls[0].left = SDL_SCANCODE_A;
+    controls[0].right = SDL_SCANCODE_D;
+    controls[0].jump = SDL_SCANCODE_W;
+    controls[0].power_up = SDL_SCANCODE_X;
+
+    controls[1].left = SDL_SCANCODE_LEFT;
+    controls[1].right = SDL_SCANCODE_RIGHT;
+    controls[1].jump = SDL_SCANCODE_UP;
+    controls[1].power_up = SDL_SCANCODE_SPACE;
+}
+
+
 void saveControls(Controls *controls)
 {
-    FILE *file = fopen("./controls.ini", "w");
+    FILE *file = fopen("controls.ini", "w");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "[Player 1]\nLeft=%d\nRight=%d\nJump=%d\n\n[Player 2]\nLeft=%d\nRight=%d\nJump=%d\n", controls[0].left, controls[0].right, controls[0].jump, controls[1].left, controls[1].right, controls[1].jump);
+    fprintf(file, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", controls[0].left, controls[0].right, controls[0].jump, controls[0].power_up, controls[1].left, controls[1].right, controls[1].jump, controls[1].power_up);
     fclose(file);
 }
 
 
 
 
-void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN])
+void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN], FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255};
     SDL_Texture *texture[NUM_SCORES + 1];
     SDL_Rect pos_dst[NUM_SCORES + 1];
     char str[100] = "";
-    unsigned long time1 = 0, time2 = 0;
 
     texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Scores", white);
     SDL_QueryTexture(texture[0], NULL, NULL, &pos_dst[0].w, &pos_dst[0].h);
@@ -267,7 +276,7 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
     }
 
 
-    transition(renderer, pictures->title, 11, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, 11, texture, pos_dst, ENTERING, 1, fps);
     int escape = 0;
 
     while(!escape)
@@ -296,11 +305,10 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 
         SDL_RenderPresent(renderer);
-
-        waitGame(&time1, &time2, DELAY_GAME);
+        SDL_framerateDelay(fps);
     }
 
-    transition(renderer, pictures->title, 11, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, 11, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < NUM_SCORES + 1; i++)
         SDL_DestroyTexture(texture[i]);
@@ -309,12 +317,11 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 
 
 
-void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[])
+void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255};
     int escape = 0;
     int frame = 0;
-    unsigned long time1 = 0, time2 = 0;
     SDL_Texture *texture[3];
     SDL_Rect pos_dst[3];
 
@@ -330,7 +337,7 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
     pos_dst[1].y = WINDOW_H / 2 + 50 - pos_dst[1].h / 2 + 2;
 
 
-    transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 1, fps);
 
 
     SDL_StartTextInput();
@@ -386,11 +393,11 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
                 SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
         if(str[0] != '\0')
             SDL_DestroyTexture(texture[2]);
 
-        waitGame(&time1, &time2, DELAY_GAME);
         frame++;
         frame = frame % 60;
     }
@@ -402,7 +409,7 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
     pos_dst[2].x = WINDOW_W / 2 - pos_dst[2].w / 2;
     pos_dst[2].y = WINDOW_H / 2 + 50 - pos_dst[2].h / 2;
 
-    transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < 3; i++)
         SDL_DestroyTexture(texture[i]);

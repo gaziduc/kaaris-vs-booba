@@ -18,9 +18,9 @@
 int level_num;
 
 
-void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings)
+void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
-    unsigned long time1 = 0, time2 = 0, frame_num = 0;
+    unsigned long frame_num = 0;
     int escape = 0;
     char my_ip[50] = "";
     char str[100] = "";
@@ -44,7 +44,7 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
         {
             IN_ADDR IPAddr;
             IPAddr.S_un.S_addr = (u_long) pIPAddrTable->table[i].dwAddr;
-            sprintf(my_ip, inet_ntoa(IPAddr));
+            strcpy(my_ip, inet_ntoa(IPAddr));
         }
 
         free(pIPAddrTable);
@@ -81,14 +81,15 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
             pos_dst[i].y = 420;
     }
 
-    transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 1, fps);
 
     while(!escape)
     {
         net->client = SDLNet_TCP_Accept(net->server);
         if(net->client != NULL)
         {
-            selectMode(renderer, pictures, fonts, in, sounds, music, settings, 1, net);
+            Mix_PlayChannel(-1, sounds->enter, 0);
+            selectMode(renderer, pictures, fonts, in, sounds, music, settings, 1, net, fps);
             SDLNet_TCP_Close(net->client);
         }
 
@@ -116,16 +117,16 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
 
         for(int i = 0; i < 3; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
-        SDL_RenderPresent(renderer);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
         frame_num++;
     }
 
     SDLNet_TCP_Close(net->server);
 
-    transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < 3; i++)
         SDL_DestroyTexture(texture[i]);
@@ -135,9 +136,8 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
 
 
 
-void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings)
+void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
-    unsigned long time1 = 0, time2 = 0;
     int escape = 0, frame = 0;
     char str[MAX_IP_LEN] = "";
     SDL_Texture *texture[3];
@@ -154,7 +154,7 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
     pos_dst[1].x = WINDOW_W / 2 - pos_dst[1].w / 2;
     pos_dst[1].y = WINDOW_H / 2 + 50 - pos_dst[1].h / 2 + 2;
 
-    transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 1, fps);
 
     SDL_StartTextInput();
 
@@ -183,9 +183,11 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
                 net->client = SDLNet_TCP_Open(&ip);
                 SDL_StopTextInput();
 
-                transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0);
-                waitingForServer(renderer, fonts, pictures, in, net, sounds, music, settings);
-                transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1);
+                Mix_PlayChannel(-1, sounds->enter, 0);
+
+                transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0, fps);
+                waitingForServer(renderer, fonts, pictures, in, net, sounds, music, settings, fps);
+                transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1, fps);
 
                 SDLNet_TCP_Close(net->client);
                 SDL_StartTextInput();
@@ -228,16 +230,17 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
                 SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
         if(str[0] != '\0')
             SDL_DestroyTexture(texture[2]);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+
         frame++;
         frame = frame % 60;
     }
 
-    transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < 2; i++)
         SDL_DestroyTexture(texture[i]);
@@ -246,9 +249,9 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
 }
 
 
-void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings)
+void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
-    unsigned long time1 = 0, time2 = 0;
+    unsigned long frame_num = 0;
     int escape = 0, selected = HOST;
     SDL_Texture *texture[NUM_OPTIONS_NET];
     SDL_Rect pos_dst[NUM_OPTIONS_NET];
@@ -265,7 +268,7 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
     }
 
 
-    transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 1, fps);
 
 
     while(!escape)
@@ -290,7 +293,10 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             in->controller[1].axes[1] = 0;
 
             if(selected > HOST)
+            {
                 selected--;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_DOWN_MENU)
         {
@@ -301,7 +307,10 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             in->controller[1].axes[1] = 0;
 
             if(selected < JOIN)
+            {
                 selected++;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_ENTER_MENU)
         {
@@ -311,18 +320,17 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             in->controller[0].buttons[0] = 0;
             in->controller[1].buttons[0] = 0;
 
+
+            Mix_PlayChannel(-1, sounds->enter, 0);
+
+            transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 0, fps);
+
             if(selected == HOST)
-            {
-                transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 0);
-                createServer(renderer, pictures, fonts, in, sounds, music, settings);
-                transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 1);
-            }
+                createServer(renderer, pictures, fonts, in, sounds, music, settings, fps);
             else if(selected == JOIN)
-            {
-                transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 0);
-                connectToServer(renderer, pictures, fonts, in, sounds, music, settings);
-                transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 1);
-            }
+                connectToServer(renderer, pictures, fonts, in, sounds, music, settings, fps);
+
+            transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 1, fps);
         }
 
         SDL_RenderClear(renderer);
@@ -334,18 +342,19 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             {
                 SDL_Rect pos_arrow;
                 SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_arrow.w, &pos_arrow.h);
-                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 10;
+                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 40 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
                 pos_arrow.y = pos_dst[i].y + pos_dst[i].h / 2 - pos_arrow.h / 2;
                 SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
             }
         }
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        frame_num++;
     }
 
-    transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < NUM_OPTIONS_NET; i++)
         SDL_DestroyTexture(texture[i]);
@@ -364,11 +373,11 @@ void receivePos(Net *net, Packet *packet)
 }
 
 
-void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Net *net, Sounds *sounds, Mix_Music **music, Settings *settings)
+void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Net *net, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
     int escape = 0;
     SDL_Color white = {255, 255, 255};
-    unsigned long time1 = 0, time2 = 0, frame_num = 0;
+    unsigned long frame_num = 0;
     SDL_Texture *texture[2];
     SDL_Rect pos_dst[2];
 
@@ -411,26 +420,29 @@ void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, 
             escape = 1;
         else if(level_num == 0)
         {
-            playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, 1, net);
-            transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1);
+            transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
+            playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, 1, net, fps);
+            transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
+            level_num = -2;
             SDL_CreateThread(waitingThread, "waitingThread", net);
         }
         else if(level_num > 0 && level_num <= NUM_LEVEL)
         {
-            playGame(renderer, in, pictures, fonts, sounds, settings, level_num, ONE_LEVEL, 1, net);
-            transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1);
+            transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
+            playGame(renderer, in, pictures, fonts, sounds, settings, level_num, ONE_LEVEL, 1, net, fps);
+            transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
+            level_num = -2;
             SDL_CreateThread(waitingThread, "waitingThread", net);
         }
 
-        level_num = -2;
 
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
         for(int i = 0; i < 2; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
-        SDL_RenderPresent(renderer);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
         frame_num++;
     }

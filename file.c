@@ -6,27 +6,44 @@
 #include "transition.h"
 
 
-void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net)
+void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255};
     int selected = 0;
     SDL_Texture *texture[MODES_NUM];
     SDL_Rect pos_dst[MODES_NUM];
     int escape = 0;
-    unsigned long time1 = 0, time2 = 0, frame_num = 0;
-    int goUp = 1;
+    unsigned long frame_num = 0;
+    int num_textures;
 
-    texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Tous les niveaux d'affilés", white);
+    texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Tous les niveaux d'affilée", white);
     SDL_QueryTexture(texture[0], NULL, NULL, &pos_dst[0].w, &pos_dst[0].h);
     pos_dst[0].x = WINDOW_W / 2 - pos_dst[0].w / 2;
-    pos_dst[0].y = 290;
+    pos_dst[0].y = WINDOW_H / 2 - pos_dst[0].h / 2 - 80;
 
     texture[1] = RenderTextBlended(renderer, fonts->ocraext_message, "Un niveau précis", white);
     SDL_QueryTexture(texture[1], NULL, NULL, &pos_dst[1].w, &pos_dst[1].h);
     pos_dst[1].x = WINDOW_W / 2 - pos_dst[1].w / 2;
-    pos_dst[1].y = 390;
+    pos_dst[1].y = WINDOW_H / 2 - pos_dst[1].h / 2;
 
-    transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 1);
+    if(num_player < 2)
+    {
+        texture[2] = RenderTextBlended(renderer, fonts->ocraext_message, "Scores", white);
+        SDL_QueryTexture(texture[2], NULL, NULL, &pos_dst[2].w, &pos_dst[2].h);
+        pos_dst[2].x = WINDOW_W / 2 - pos_dst[2].w / 2;
+        pos_dst[2].y = WINDOW_H / 2 - pos_dst[2].h / 2 + 80;
+        num_textures = 3;
+    }
+    else
+    {
+        texture[2] = NULL;
+        pos_dst[0].y += 40;
+        pos_dst[1].y += 40;
+        num_textures = 2;
+    }
+
+
+    transition(renderer, pictures->title, num_textures, texture, pos_dst, ENTERING, 1, fps);
 
     while(!escape)
     {
@@ -64,7 +81,11 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
 
 
             if(selected > 0)
+            {
                 selected--;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
+
         }
         if(KEY_DOWN_MENU)
         {
@@ -74,8 +95,12 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             in->controller[1].hat[0] = SDL_HAT_CENTERED;
             in->controller[1].axes[1] = 0;
 
-            if(selected < MODES_NUM - 1)
+            if(selected < num_textures - 1)
+            {
                 selected++;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
+
         }
         if(KEY_ENTER_MENU)
         {
@@ -85,12 +110,23 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             in->controller[0].buttons[0] = 0;
             in->controller[1].buttons[0] = 0;
 
-            transition(renderer, pictures->title, MODES_NUM, texture, pos_dst, ENTERING, 0);
+            Mix_PlayChannel(-1, sounds->enter, 0);
 
-            if(selected == ONE_LEVEL)
-                map(renderer, in, pictures, fonts, sounds, music, settings, num_player, net);
+            transition(renderer, pictures->title, num_textures, texture, pos_dst, ENTERING, 0, fps);
+
+            if(selected == SCORES)
+            {
+                unsigned long scores[NUM_SCORES];
+                char names[NUM_SCORES][NAME_LEN];
+                loadScores(scores, names);
+                displayScoreList(renderer, pictures, fonts, in, scores, names, fps);
+            }
+            else if(selected == ONE_LEVEL)
+                map(renderer, in, pictures, fonts, sounds, music, settings, num_player, net, fps);
             else
             {
+                transition(renderer, pictures->title, num_textures, texture, pos_dst, ENTERING, 0, fps);
+
                 if(net != NULL)
                 {
                     ChoosePacket packet;
@@ -102,54 +138,42 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
                 Mix_HaltMusic();
                 Mix_FreeMusic(*music);
 
-                playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, num_player, net);
+                playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, num_player, net, fps);
 
-                *music = Mix_LoadMUS("./data/music/menu.mp3");
+                *music = Mix_LoadMUS("data/musics/menu.mp3");
                 Mix_PlayMusic(*music, -1);
             }
 
 
-            transition(renderer, pictures->title, MODES_NUM, texture, pos_dst, EXITING, 1);
+            transition(renderer, pictures->title, num_textures, texture, pos_dst, EXITING, 1, fps);
         }
 
 
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
 
-        for(int i = 0; i < MODES_NUM; i++)
+        for(int i = 0; i < num_textures; i++)
         {
-            roundedBoxRGBA(renderer, WINDOW_W / 4 - 60, pos_dst[i].y - 20, (WINDOW_W / 4) * 3 + 60, pos_dst[i].y + pos_dst[i].h + 20, 25, 0, (selected == i) ? 140 - frame_num : 162, (i == 1) ? 0 : 232, 255);
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
             if(selected == i)
             {
                 SDL_Rect pos_arrow;
                 SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_arrow.w, &pos_arrow.h);
-                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 20;
+                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 40 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
                 pos_arrow.y = pos_dst[i].y + pos_dst[i].h / 2 - pos_arrow.h / 2;
                 SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
             }
         }
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
-        waitGame(&time1, &time2, DELAY_GAME);
-        if(goUp)
-        {
-            frame_num += 2;
-            if(frame_num >= 80)
-                goUp = 0;
-        }
-        else
-        {
-            frame_num -= 2;
-            if(frame_num <= 0)
-                goUp = 1;
-        }
+        frame_num++;
     }
 
-    transition(renderer, pictures->title, MODES_NUM, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, num_textures, texture, pos_dst, EXITING, 0, fps);
 
-    for(int i = 0; i < MODES_NUM; i++)
+    for(int i = 0; i < num_textures; i++)
         SDL_DestroyTexture(texture[i]);
 }
 

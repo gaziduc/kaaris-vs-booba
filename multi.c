@@ -7,13 +7,12 @@
 #include "transition.h"
 #include "file.h"
 
-void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pictures *pictures, Sounds *sounds, Mix_Music **music, Settings *settings)
+void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pictures *pictures, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255};
     SDL_Texture *texture[NUM_TEXT_MULTI];
     SDL_Rect pos_dst[NUM_TEXT_MULTI];
     int escape = 0;
-    unsigned long time1 = 0, time2 = 0;
     char str[200] = "";
 
     texture[START_GAME] = RenderTextBlended(renderer, fonts->ocraext_score, "APPUYEZ SUR ENTREE POUR COMMENCER !", white);
@@ -36,7 +35,7 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
             pos_dst[i].y = 320 + 70 * i;
     }
 
-    transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, ENTERING, 1, fps);
 
     while(!escape)
     {
@@ -62,9 +61,11 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
             in->controller[1].buttons[0] = 0;
             in->controller[1].buttons[1] = 0;
 
-            transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, ENTERING, 0);
-            selectMode(renderer, pictures, fonts, in, sounds, music, settings, 2, NULL);
-            transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, EXITING, 1);
+            Mix_PlayChannel(-1, sounds->enter, 0);
+
+            transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, ENTERING, 0, fps);
+            selectMode(renderer, pictures, fonts, in, sounds, music, settings, 2, NULL, fps);
+            transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, EXITING, 1, fps);
         }
 
         SDL_DestroyTexture(texture[P1_TYPE]);
@@ -87,12 +88,12 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
         for(int i = 0; i < NUM_TEXT_MULTI; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
-        SDL_RenderPresent(renderer);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
     }
 
-    transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = 0; i < NUM_TEXT_MULTI; i++)
         SDL_DestroyTexture(texture[i]);

@@ -39,3 +39,42 @@ void removeAllMonsters(MonsterList *monsterList)
 }
 
 
+
+
+
+void initBulletList(BulletList *bulletList)
+{
+    bulletList->next = NULL;
+}
+
+
+void insertBullet(BulletList *bulletList, BulletList *bullet)
+{
+    bullet->next = bulletList->next;
+    bulletList->next = bullet;
+}
+
+
+void removeBulletFromIndex(BulletList *bulletList, int index)
+{
+    if(index == 0)
+    {
+        BulletList *toDelete = bulletList->next;
+        bulletList->next = bulletList->next->next;
+        free(toDelete);
+    }
+    else
+        removeBulletFromIndex(bulletList->next, index - 1);
+}
+
+
+void removeAllBullets(BulletList *bulletList)
+{
+    if(bulletList->next != NULL)
+        removeAllBullets(bulletList->next);
+
+    free(bulletList->next);
+    bulletList->next = NULL;
+}
+
+

@@ -1,23 +1,26 @@
 1 ICON "icon.ico"
 
 #include <windows.h>
+#include "version.h"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     0,29,0,0
-PRODUCTVERSION  0,29,0,0
+FILEVERSION     VERSION_WIN
+PRODUCTVERSION  VERSION_WIN
 FILETYPE        VFT_APP
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
         BLOCK "040904E4"
         BEGIN
-            VALUE "CompanyName",      "David Ghiassi"
-            VALUE "FileDescription",  "Kaaris vs Booba"
-            VALUE "FileVersion",      "0.29.0"
-            VALUE "InternalName",     "Kaaris vs Booba"
-            VALUE "OriginalFilename", "Kaaris vs Booba.exe"
-            VALUE "ProductName",      "Kaaris vs Booba"
-            VALUE "ProductVersion",   "0.29.0"
+            VALUE "CompanyName",      "David Gazi\0" // Do not remove \0
+            VALUE "FileDescription",  DESCRIPTION_STR
+            VALUE "FileVersion",      VERSION_STR
+            VALUE "InternalName",     "Kaaris vs Booba\0"
+            VALUE "LegalCopyright",   "Copyright © 2019. All rights reserved.\0"
+            VALUE "LegalTrademarks",  "Kaaris vs Booba is a registered trademark of David Gazi.\0"
+            VALUE "OriginalFilename", "Kaaris vs Booba.exe\0"
+            VALUE "ProductName",      "Kaaris vs Booba\0"
+            VALUE "ProductVersion",   VERSION_STR
         END
     END
 

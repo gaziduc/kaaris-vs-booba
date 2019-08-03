@@ -4,6 +4,7 @@
     #include <SDL2/SDL.h>
     #include <SDL2/SDL_ttf.h>
     #include <SDL2/SDL_mixer.h>
+    #include <SDL2/SDL2_framerate.h>
     #include "event.h"
 
     #define NUM_SCORES      10
@@ -12,11 +13,13 @@
 
     typedef struct
     {
-        TTF_Font *ocraext_title;
+        TTF_Font *preview_title;
+        TTF_Font *preview_intro;
         TTF_Font *ocraext_score;
         TTF_Font *ocraext_message;
         TTF_Font *ocraext_commands;
         TTF_Font *ocraext_editorHUD;
+        TTF_Font *ocraext_version;
     } Fonts;
 
     typedef struct
@@ -24,10 +27,12 @@
         SDL_Texture *HUDlife;
         SDL_Texture *HUDcoin;
         SDL_Texture *HUDtimer;
-        SDL_Texture *gameover;
         SDL_Texture *title;
         SDL_Texture *explosion;
         SDL_Texture *highligthed;
+        SDL_Texture *bullet_left;
+        SDL_Texture *bullet_right;
+        SDL_Texture *boss;
     } Pictures;
 
     typedef struct
@@ -39,9 +44,12 @@
         Mix_Chunk *coin;
         Mix_Chunk *explosion;
         Mix_Chunk *checkpoint;
-        Mix_Chunk *text;
         Mix_Chunk *invicible;
         Mix_Chunk *complete;
+        Mix_Chunk *select;
+        Mix_Chunk *enter;
+        Mix_Chunk *gun;
+        Mix_Chunk *linefeed;
     } Sounds;
 
     typedef struct
@@ -49,6 +57,7 @@
         int left;
         int right;
         int jump;
+        int power_up;
     } Controls;
 
     typedef struct
@@ -56,6 +65,7 @@
         int fullscreen;
         int music_volume;
         int sfx_volume;
+        int haptic;
         Controls *controls;
     } Settings;
 
@@ -67,12 +77,13 @@
     Sounds* loadSounds();
     Settings* loadSettings();
     Controls* loadControls();
+    void getDefaultControls(Controls *controls);
     void saveSettings(Settings *settings);
     void saveControls(Controls *controls);
     void loadScores(unsigned long scores[], char names[][NAME_LEN]);
     void saveScores(unsigned long scores[], char names[][NAME_LEN]);
-    void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN]);
-    void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[]);
+    void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN], FPSmanager *fps);
+    void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], FPSmanager *fps);
     void loadTimes(unsigned long times[]);
     void saveTimes(unsigned long times[]);
     void updateTimes(const int level_num, const unsigned long player_time);

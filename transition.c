@@ -4,34 +4,29 @@
 #include "transition.h"
 #include "game.h"
 
-void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_Texture *texture[], SDL_Rect pos_dst[], const int type, const int number)
+void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_Texture *texture[], SDL_Rect pos_dst[], const int type, const int number, FPSmanager *fps)
 {
     float speed = 0;
     int finished = 0;
-    unsigned long time1 = 0, time2 = 0;
 
-    if(type == ENTERING)
+    if(number == 0)
+        speed = 1;
+    else
     {
-        if(number == 0)
-            speed = -1;
-        else
+        speed = MAX_SPEED;
+        if(type == ENTERING)
         {
-            speed = -MAX_SPEED;
             for(int i = 0; i < num_textures; i++)
                 pos_dst[i].x = WINDOW_W - pos_dst[i].w / 2;
         }
-    }
-    else
-    {
-        if(number == 0)
-            speed = 1;
         else
         {
-            speed = MAX_SPEED;
             for(int i = 0; i < num_textures; i++)
                 pos_dst[i].x = -pos_dst[i].w / 2;
         }
     }
+
+
 
 
     while(!finished)
@@ -41,20 +36,23 @@ void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_T
         SDL_RenderCopy(renderer, bg, NULL, NULL);
 
         if(number == 0)
-            speed *= 1.15;
+            speed *= 1.2;
         else
-            speed /= 1.15;
+            speed /= 1.157;
 
         if(speed > MAX_SPEED)
             speed = MAX_SPEED;
-        else if(speed > -1 && speed < 1)
-            speed *= 2;
+        else if(speed < 1)
+            speed = 1;
 
         finished = 1;
 
         for(int i = 0; i < num_textures; i++)
         {
-            pos_dst[i].x += (int) (speed + 0.5);
+            if(type == ENTERING)
+                pos_dst[i].x += (int) -speed;
+            else
+                pos_dst[i].x += (int) speed;
 
             if(type == ENTERING && number == 0)
             {
@@ -73,8 +71,7 @@ void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_T
         }
 
         SDL_RenderPresent(renderer);
-
-        waitGame(&time1, &time2, DELAY_GAME);
+        SDL_framerateDelay(fps);
     }
 
 }
@@ -93,12 +90,10 @@ void levelFinished(SDL_Renderer *renderer, Fonts *fonts, Player *player, int lev
     pos_dst.w = WINDOW_W / 1.5;
     pos_dst.h = WINDOW_H / 2 - 100;
 
-    SDL_SetRenderDrawColor(renderer, 100, 90, 120, 192);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderFillRect(renderer, &pos_dst);
-    SDL_SetRenderDrawColor(renderer, 45, 200, 100, 255);
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
-    SDL_RenderDrawRect(renderer, &pos_dst);
+    if(roundedBoxRGBA(renderer, pos_dst.x, pos_dst.y, pos_dst.x + pos_dst.w, pos_dst.y + pos_dst.h, 10, 64, 64, 64, 192) == -1)
+        exit(EXIT_FAILURE);
+    if(roundedRectangleRGBA(renderer, pos_dst.x, pos_dst.y, pos_dst.x + pos_dst.w, pos_dst.y + pos_dst.h, 10, 255, 255, 255, 255) == -1)
+        exit(EXIT_FAILURE);
 
     sprintf(str, "Niveau %d terminé !", level_num);
     texture = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
@@ -131,17 +126,17 @@ void levelFinished(SDL_Renderer *renderer, Fonts *fonts, Player *player, int lev
 }
 
 
-int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, Fonts *fonts, Input *in)
+int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, FPSmanager *fps)
 {
-    SDL_Color black = {0, 0, 0};
+    SDL_Color white = {255, 255, 255};
     int selected = RESUME;
     int escape = 0;
-    unsigned long time1 = 0, time2 = 0;
+    unsigned long frame_num = 0;
 
     SDL_Texture *text[3];
-    text[0] = RenderTextBlended(renderer, fonts->ocraext_title, "Pause", black);
-    text[1] = RenderTextBlended(renderer, fonts->ocraext_message, "Reprendre", black);
-    text[2] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", black);
+    text[0] = RenderTextBlended(renderer, fonts->preview_title, "Pause", white);
+    text[1] = RenderTextBlended(renderer, fonts->ocraext_message, "Reprendre", white);
+    text[2] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
     SDL_Rect pos_dst[3];
 
@@ -172,7 +167,10 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
             in->controller[1].axes[1] = 0;
 
             if(selected > RESUME)
+            {
                 selected--;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_DOWN_MENU)
         {
@@ -183,7 +181,10 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
             in->controller[1].axes[1] = 0;
 
             if(selected < QUIT_PAUSE)
+            {
                 selected++;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_ENTER_MENU)
         {
@@ -214,8 +215,8 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
 
-        roundedBoxRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 25, 128, 128, 128, 192);
-        roundedRectangleRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 25, 240, 240, 240, 255);
+        roundedBoxRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 10, 64, 64, 64, 192);
+        roundedRectangleRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 10, 255, 255, 255, 192);
 
         for(int i = 0; i < NUM_TEXT_PAUSE; i++)
         {
@@ -224,15 +225,16 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
             {
                 SDL_Rect pos_arrow;
                 SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_arrow.w, &pos_arrow.h);
-                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 10;
+                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 40 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
                 pos_arrow.y = pos_dst[i].y + pos_dst[i].h / 2 - pos_arrow.h / 2;
                 SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
             }
         }
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        frame_num++;
     }
 
     for(int i = 0; i < 3; i++)

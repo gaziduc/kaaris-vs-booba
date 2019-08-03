@@ -26,12 +26,12 @@
         int level_num;
     } ChoosePacket;
 
-    void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings);
-    void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings);
-    void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings);
+    void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps);
+    void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps);
+    void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps);
     void sendPos(Net *net, Packet *packet);
     void receivePos(Net *net, Packet *packet);
-    void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Net *net, Sounds *sounds, Mix_Music **music, Settings *settings);
+    void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Net *net, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps);
     int waitingThread(void *data);
 
 #endif // NET_H

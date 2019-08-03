@@ -1,7 +1,9 @@
+#include <stdio.h>
 #include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_net.h>
+#include <SDL2/SDL2_framerate.h>
 #include "event.h"
 #include "game.h"
 #include "key.h"
@@ -10,8 +12,10 @@
 #include "option.h"
 #include "file.h"
 #include "multi.h"
+#include "text.h"
+#include "version.h"
 
-enum {TITLE, SOLO, MULTIPLAYER, ONLINE, COMMANDS, OPTIONS, SCORES, QUIT, NUM_TEXT};
+enum {TITLE, SOLO, MULTIPLAYER, ONLINE, OPTIONS, QUIT, INFO, VERSION, NUM_TEXT};
 
 int main(int argc, char *argv[])
 {
@@ -20,6 +24,7 @@ int main(int argc, char *argv[])
     SDL_Renderer *renderer = NULL;
     SDL_Surface *icon = NULL;
     Mix_Music *music = NULL;
+    FPSmanager *fps = NULL;
     int img_flags = IMG_INIT_JPG | IMG_INIT_PNG;
     int mix_flags = MIX_INIT_MP3;
     int initted = 0, escape = 0;
@@ -27,11 +32,12 @@ int main(int argc, char *argv[])
     Pictures *pictures;
     Sounds *sounds;
     Settings *settings;
-    unsigned long time1 = 0, time2 = 0;
+    unsigned long frame_num = 0;
     SDL_Rect pos_dst[NUM_TEXT];
     SDL_Texture *texture[NUM_TEXT];
     SDL_Color white = {255, 255, 255};
     int selected = SOLO;
+    char str[256] = "";
 
 
     srand(time(NULL));
@@ -42,7 +48,7 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    window = SDL_CreateWindow("Kaaris vs Booba", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
+    window = SDL_CreateWindow(DESCRIPTION_STR, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
     if(window == NULL)
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not create window", SDL_GetError(), NULL);
@@ -51,16 +57,12 @@ int main(int argc, char *argv[])
 
     SDL_ShowCursor(SDL_DISABLE);
 
-    renderer = SDL_CreateRenderer(window, -1, 0);
+    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     if(renderer == NULL)
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not create renderer", SDL_GetError(), window);
         exit(EXIT_FAILURE);
     }
-
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-    SDL_RenderClear(renderer);
-    SDL_RenderPresent(renderer);
 
     initted = IMG_Init(img_flags);
     if((initted & img_flags) != img_flags)
@@ -85,7 +87,7 @@ int main(int argc, char *argv[])
     #endif // WIN64
 
     Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 1024);
-    Mix_AllocateChannels(16); // 16 to be sure that all sfx will be heard (multiple coins, ...)
+    Mix_AllocateChannels(32); // 32 to be sure that all sfx will be heard (multiple coins, ...)
 
     if(SDLNet_Init() == -1)
     {
@@ -106,36 +108,55 @@ int main(int argc, char *argv[])
     Mix_VolumeMusic(settings->music_volume);
     setSfxVolume(sounds, settings->sfx_volume);
 
-    icon = IMG_Load("./data/hud/life.bmp");
+    icon = IMG_Load("data/gfx/life.bmp");
     SDL_SetWindowIcon(window, icon);
     SDL_FreeSurface(icon);
 
     if(settings->fullscreen)
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 
-    texture[TITLE] = RenderTextBlended(renderer, fonts->ocraext_title, "Kaaris vs Booba", white);
+    fps = malloc(sizeof(FPSmanager));
+    if(fps == NULL)
+        exit(EXIT_FAILURE);
+
+    SDL_initFramerate(fps);
+    SDL_setFramerate(fps, 30);
+
+    intro(renderer, in, pictures, fonts, sounds, fps);
+
+    SDL_setFramerate(fps, 60);
+
+    texture[TITLE] = RenderTextBlended(renderer, fonts->preview_title, "Kaaris vs Booba", white);
     texture[SOLO] = RenderTextBlended(renderer, fonts->ocraext_message, "Solo", white);
     texture[MULTIPLAYER] = RenderTextBlended(renderer, fonts->ocraext_message, "Multijoueurs", white);
     texture[ONLINE] = RenderTextBlended(renderer, fonts->ocraext_message, "En ligne", white);
-    texture[COMMANDS] = RenderTextBlended(renderer, fonts->ocraext_message, "Commandes", white);
     texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
-    texture[SCORES] = RenderTextBlended(renderer, fonts->ocraext_message, "Scores", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
+
+    sprintf(str, "David Gazi - Version %s (64 bits) - 2019", VERSION_STR);
+    texture[VERSION] = RenderTextBlended(renderer, fonts->ocraext_version, str, white);
+    texture[INFO] = RenderTextBlended(renderer, fonts->ocraext_version, "Editeur de niveau : F8", white);
 
     for(int i = TITLE; i < NUM_TEXT; i++)
     {
         SDL_QueryTexture(texture[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
         pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
 
-        if(i != TITLE)
-            pos_dst[i].y = 240 + (i - 1) * 60;
+        if(i == TITLE)
+            pos_dst[i].y = 80;
+        else if(i < INFO)
+            pos_dst[i].y = 255 + (i - 1) * 70;
+        else if(i < VERSION)
+            pos_dst[i].y = WINDOW_H - 70;
         else
-            pos_dst[i].y = 100;
+            pos_dst[i].y = WINDOW_H - 48;
+
     }
 
-    music = Mix_LoadMUS("./data/music/menu.mp3");
+    music = Mix_LoadMUS("data/musics/menu.mp3");
     Mix_PlayMusic(music, -1);
 
+    transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 1, fps);
 
     while(!escape)
     {
@@ -152,7 +173,10 @@ int main(int argc, char *argv[])
             in->controller[1].axes[1] = 0;
 
             if(selected > SOLO)
+            {
                 selected--;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_DOWN_MENU)
         {
@@ -163,7 +187,10 @@ int main(int argc, char *argv[])
             in->controller[1].axes[1] = 0;
 
             if(selected < QUIT)
+            {
                 selected++;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
         }
         if(KEY_ENTER_MENU)
         {
@@ -173,52 +200,31 @@ int main(int argc, char *argv[])
             in->controller[0].buttons[0] = 0;
             in->controller[1].buttons[0] = 0;
 
-            if(selected == SOLO)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                selectMode(renderer, pictures, fonts, in, sounds, &music, settings, 1, NULL);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-            }
-            else if(selected == MULTIPLAYER)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                selectMultiCommandType(renderer, in, fonts, pictures, sounds, &music, settings);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-            }
-            else if(selected == ONLINE)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                hostOrJoin(renderer, pictures, fonts, in, sounds, &music, settings);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-            }
-            else if(selected == COMMANDS)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                displayKeys(renderer, fonts, pictures, in, settings);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-            }
-            else if(selected == OPTIONS)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                displayOptions(renderer, window, pictures, fonts, sounds, settings, in);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-
-            }
-            else if(selected == SCORES)
-            {
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0);
-                unsigned long scores[NUM_SCORES];
-                char names[NUM_SCORES][NAME_LEN];
-                loadScores(scores, names);
-                displayScoreList(renderer, pictures, fonts, in, scores, names);
-                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1);
-            }
-            else if(selected == QUIT)
+            if(selected == QUIT)
                 escape = 1;
+            else
+            {
+                Mix_PlayChannel(-1, sounds->enter, 0);
+
+                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0, fps);
+
+                if(selected == SOLO)
+                    selectMode(renderer, pictures, fonts, in, sounds, &music, settings, 1, NULL, fps);
+                else if(selected == MULTIPLAYER)
+                    selectMultiCommandType(renderer, in, fonts, pictures, sounds, &music, settings, fps);
+                else if(selected == ONLINE)
+                    hostOrJoin(renderer, pictures, fonts, in, sounds, &music, settings, fps);
+                else if(selected == OPTIONS)
+                    displayOptions(renderer, window, pictures, fonts, sounds, settings, in, fps);
+
+                transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, EXITING, 1, fps);
+            }
         }
         if(in->key[SDL_SCANCODE_F8])
-            editor(renderer, in, pictures, fonts, settings);
-
+        {
+            in->key[SDL_SCANCODE_F8] = 0;
+            editor(renderer, in, pictures, fonts, settings, fps);
+        }
 
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
@@ -230,15 +236,16 @@ int main(int argc, char *argv[])
             {
                 SDL_Rect pos_arrow;
                 SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_arrow.w, &pos_arrow.h);
-                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 10;
+                pos_arrow.x = pos_dst[i].x - pos_arrow.w - 40 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
                 pos_arrow.y = pos_dst[i].y + pos_dst[i].h / 2 - pos_arrow.h / 2;
                 SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
             }
         }
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        frame_num++;
     }
 
     return EXIT_SUCCESS;

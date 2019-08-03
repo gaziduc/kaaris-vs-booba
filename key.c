@@ -8,28 +8,30 @@
 #include "transition.h"
 
 
-void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Settings *settings)
+void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, Settings *settings, Sounds *sounds, FPSmanager *fps)
 {
     SDL_Texture *texture[NUM_KEYS];
     SDL_Rect pos_dst[NUM_KEYS];
     SDL_Color white = {255, 255, 255};
     int escape = 0, player_selected = 0, player_modified = 0, key_selected = GO_LEFT;
-    unsigned long time1 = 0, time2 = 0;
+    unsigned long frame_num = 0;
     char str[200] = "";
 
-    texture[HEADER] = RenderTextBlended(renderer, fonts->ocraext_score, "Joueur 1                 Joueur 2", white);
+    texture[HEADER] = RenderTextBlended(renderer, fonts->ocraext_message, "Joueur 1                       Joueur 2", white);
 
-    char *scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].left);
-    sprintf(str, "Aller à gauche : %s", scancodeToString);
-    texture[GO_LEFT] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+    sprintf(str, "Aller à gauche : %s", SDL_GetScancodeName(settings->controls[player_selected].left));
+    texture[GO_LEFT] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
 
-    scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].right);
-    sprintf(str, "Aller à droite : %s", scancodeToString);
-    texture[GO_RIGHT] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+    sprintf(str, "Aller à droite : %s", SDL_GetScancodeName(settings->controls[player_selected].right));
+    texture[GO_RIGHT] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
 
-    scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].jump);
-    sprintf(str, "Sauter : %s", scancodeToString);
-    texture[JUMP] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+    sprintf(str, "Sauter : %s", SDL_GetScancodeName(settings->controls[player_selected].jump));
+    texture[JUMP] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+
+    sprintf(str, "Power-up : %s", SDL_GetScancodeName(settings->controls[player_selected].power_up));
+    texture[POWER_UP] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+
+    texture[RESET_KEYS] = RenderTextBlended(renderer, fonts->ocraext_message, "Réinitialiser les commandes par défaut", white);
 
     for(int i = HEADER; i < NUM_KEYS; i++)
     {
@@ -37,11 +39,13 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
         pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
         if(i == HEADER)
             pos_dst[i].y = 120;
+        else if(i < RESET_KEYS)
+            pos_dst[i].y = 200 + i * 60;
         else
-            pos_dst[i].y = 200 + (i * 70);
+            pos_dst[i].y = 260 + i * 60;
     }
 
-    transition(renderer, pictures->title, NUM_KEYS, texture, pos_dst, ENTERING, 1);
+    transition(renderer, pictures->title, NUM_KEYS, texture, pos_dst, ENTERING, 1, fps);
 
     while(!escape)
     {
@@ -64,9 +68,18 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
             in->controller[0].buttons[0] = 0;
             in->controller[1].buttons[0] = 0;
 
-            SDL_Texture *temp = getScreenTexture(renderer);
-            changeKey(renderer, temp, settings, fonts, player_selected, key_selected);
-            SDL_DestroyTexture(temp);
+            if(key_selected != RESET_KEYS)
+            {
+                SDL_Texture *temp = getScreenTexture(renderer);
+                changeKey(renderer, temp, settings, fonts, player_selected, key_selected);
+                SDL_DestroyTexture(temp);
+            }
+            else
+            {
+                getDefaultControls(settings->controls);
+                saveControls(settings->controls);
+                Mix_PlayChannel(-1, sounds->enter, 0);
+            }
 
             player_modified = 1;
         }
@@ -82,8 +95,8 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
             {
                  player_selected--;
                  player_modified = 1;
+                 Mix_PlayChannel(-1, sounds->select, 0);
             }
-
         }
         if(KEY_RIGHT_MENU)
         {
@@ -97,6 +110,7 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
             {
                 player_selected++;
                 player_modified = 1;
+                Mix_PlayChannel(-1, sounds->select, 0);
             }
         }
         if(KEY_UP_MENU)
@@ -108,7 +122,11 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
             in->controller[1].axes[1] = 0;
 
             if(key_selected > GO_LEFT)
+            {
                 key_selected--;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
+
         }
         if(KEY_DOWN_MENU)
         {
@@ -118,28 +136,32 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
             in->controller[1].hat[0] = SDL_HAT_CENTERED;
             in->controller[1].axes[1] = 0;
 
-            if(key_selected < JUMP)
+            if(key_selected < RESET_KEYS)
+            {
                 key_selected++;
+                Mix_PlayChannel(-1, sounds->select, 0);
+            }
+
         }
 
         if(player_modified)
         {
-            for(int i = GO_LEFT; i <= JUMP; i++)
+            for(int i = GO_LEFT; i <= POWER_UP; i++)
                 SDL_DestroyTexture(texture[i]);
 
-            char *scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].left);
-            sprintf(str, "Aller à gauche : %s", scancodeToString);
-            texture[GO_LEFT] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+            sprintf(str, "Aller à gauche : %s", SDL_GetScancodeName(settings->controls[player_selected].left));
+            texture[GO_LEFT] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
 
-            scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].right);
-            sprintf(str, "Aller à droite : %s", scancodeToString);
-            texture[GO_RIGHT] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+            sprintf(str, "Aller à droite : %s", SDL_GetScancodeName(settings->controls[player_selected].right));
+            texture[GO_RIGHT] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
 
-            scancodeToString = SDL_GetScancodeName(settings->controls[player_selected].jump);
-            sprintf(str, "Sauter : %s", scancodeToString);
-            texture[JUMP] = RenderTextBlended(renderer, fonts->ocraext_score, str, white);
+            sprintf(str, "Sauter : %s", SDL_GetScancodeName(settings->controls[player_selected].jump));
+            texture[JUMP] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
 
-            for(int i = GO_LEFT; i <= JUMP; i++)
+            sprintf(str, "Power-up : %s", SDL_GetScancodeName(settings->controls[player_selected].power_up));
+            texture[POWER_UP] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+
+            for(int i = GO_LEFT; i <= POWER_UP; i++)
             {
                 SDL_QueryTexture(texture[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
                 pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
@@ -151,18 +173,27 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
 
-        roundedBoxRGBA(renderer, pos_dst[HEADER].x + player_selected * 520 - 55, pos_dst[HEADER].y - 20, pos_dst[HEADER].x + player_selected * 520 + 240 - 15, pos_dst[HEADER].y + 60, 25, 82, 171, 78, 255);
-        roundedBoxRGBA(renderer, (int) WINDOW_W / 2 - 400, pos_dst[key_selected].y - 20, (int) WINDOW_W / 2 + 400, pos_dst[key_selected].y + 55, 25, 0, 160, 160, 255);
+
+        SDL_Rect pos_arrow;
+        SDL_QueryTexture(pictures->HUDlife, NULL, NULL, &pos_arrow.w, &pos_arrow.h);
+        pos_arrow.x = pos_dst[HEADER].x - pos_arrow.w - 40 + player_selected * 465 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
+        pos_arrow.y = pos_dst[HEADER].y + pos_dst[HEADER].h / 2 - pos_arrow.h / 2;
+        SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
+
+        pos_arrow.x = pos_dst[key_selected].x - pos_arrow.w - 40 + (frame_num % 60 < 30 ? frame_num % 30 : 30 - frame_num % 30);
+        pos_arrow.y = pos_dst[key_selected].y + pos_dst[key_selected].h / 2 - pos_arrow.h / 2;
+        SDL_RenderCopy(renderer, pictures->HUDlife, NULL, &pos_arrow);
 
         for(int i = HEADER; i < NUM_KEYS; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 
         SDL_RenderPresent(renderer);
+        SDL_framerateDelay(fps);
 
-        waitGame(&time1, &time2, DELAY_GAME);
+        frame_num++;
     }
 
-    transition(renderer, pictures->title, NUM_KEYS, texture, pos_dst, EXITING, 0);
+    transition(renderer, pictures->title, NUM_KEYS, texture, pos_dst, EXITING, 0, fps);
 
     for(int i = HEADER; i < NUM_KEYS; i++)
         SDL_DestroyTexture(texture[i]);
@@ -174,26 +205,41 @@ void changeKey(SDL_Renderer *renderer, SDL_Texture *texture, Settings *settings,
     SDL_Color white = {255, 255, 255};
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
-    roundedBoxRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 50, 64, 64, 64, 250);
-    SDL_Texture *text = RenderTextBlended(renderer, fonts->ocraext_message, "Appuyez sur une touche...", white);
-    SDL_Rect pos_dst;
-    SDL_QueryTexture(text, NULL, NULL, &pos_dst.w, &pos_dst.h);
-    pos_dst.x = WINDOW_W / 2 - pos_dst.w / 2;
-    pos_dst.y = WINDOW_H / 2 - pos_dst.h / 2;
-    SDL_RenderCopy(renderer, text, NULL, &pos_dst);
+    roundedBoxRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 10, 64, 64, 64, 245);
+    roundedRectangleRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 10, 255, 255, 255, 245);
+
+    SDL_Texture *text[2];
+    text[0] = RenderTextBlended(renderer, fonts->preview_intro, "Appuyez sur une touche", white);
+    text[1] = RenderTextBlended(renderer, fonts->ocraext_message, "Retour : Echap", white);
+
+    SDL_Rect pos_dst[2];
+    for(int i = 0; i < 2; i++)
+    {
+        SDL_QueryTexture(text[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
+        pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
+        pos_dst[i].y = WINDOW_H / 2 - pos_dst[i].h / 2 - 50 + i * 100;
+        SDL_RenderCopy(renderer, text[i], NULL, &pos_dst[i]);
+    }
+
     SDL_RenderPresent(renderer);
 
     int scancode = getKey();
 
-    if(key == GO_LEFT)
-        settings->controls[player_num].left = scancode;
-    else if(key == GO_RIGHT)
-        settings->controls[player_num].right = scancode;
-    else if(key == JUMP)
-        settings->controls[player_num].jump = scancode;
+    if(scancode != SDL_SCANCODE_ESCAPE)
+    {
+        if(key == GO_LEFT)
+            settings->controls[player_num].left = scancode;
+        else if(key == GO_RIGHT)
+            settings->controls[player_num].right = scancode;
+        else if(key == JUMP)
+            settings->controls[player_num].jump = scancode;
+        else if(key == POWER_UP)
+            settings->controls[player_num].power_up = scancode;
 
-    saveSettings(settings);
+        saveSettings(settings);
+    }
 
-    SDL_DestroyTexture(text);
+    for(int i = 0; i < 2; i++)
+        SDL_DestroyTexture(text[i]);
 }
 
