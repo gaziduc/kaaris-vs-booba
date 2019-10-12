@@ -1,3 +1,4 @@
+#include <string.h>
 #include <SDL2/SDL.h>
 #include "event.h"
 
@@ -16,7 +17,7 @@ void updateEvents(Input* in)
                 in->quit = 1;
                 break;
             case SDL_TEXTINPUT:
-                strcat(in->text, event.text.text);
+                strncat(in->text, event.text.text, sizeof(in->text) - 1);
                 break;
             case SDL_KEYDOWN:
                 in->key[event.key.keysym.scancode] = 1;

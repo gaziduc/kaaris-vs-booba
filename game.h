@@ -6,7 +6,6 @@
     #define TILE_SIZE           32
     #define PLAYER_W            32
     #define PLAYER_H            80
-    #define APPR_DELAY_GAME     1000 / 60
     #define NUM_ANIM_TILE       8
     #define NUM_FRAME_ANIM      7
 
@@ -29,7 +28,7 @@
     #define GUN_LABEL           "Lance-roquettes"
     #define JETPACK_LABEL       "Jetpack"
     #define CHECKPOINT_LABEL    "Point de contrôle"
-    #define PERFUME_LABEL       "Flacon de parfum : inviciblité"
+    #define PERFUME_LABEL       "Flacon de parfum : invincibilité"
 
     #define BUMPER_NUM          6
     #define LIFE_NUM            7
@@ -48,6 +47,9 @@
     #define CRATE_JETPACK_NUM   28
     #define TELEPORT_NUM        36
 
+    #define SPAWN_X             70
+    #define SPAWN_Y             250
+
     #include <SDL2/SDL_mixer.h>
     #include <SDL2/SDL2_framerate.h>
     #include "data.h"
@@ -63,10 +65,10 @@
         int dirXmax;
         int dirYmin;
         int dirYmax;
-        SDL_Rect *pos_dst;
-        int *dirX;
-        int *dirY;
-        float *scale;
+        SDL_Rect *pos_dst[2];
+        int *dirX[2];
+        int *dirY[2];
+        float *scale[2];
     } Weather;
 
     typedef struct
@@ -146,30 +148,30 @@
     } Player;
 
     void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps);
-    void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Settings *settings);
-    void freeLevel(Lvl *lvl, int mode);
+    void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players);
+    void freeLevel(Lvl *lvl, int mode, int num_players);
     void freePlayer(Player *player);
     void respawn(Player *player);
-    void displaySky(SDL_Renderer *renderer, Player *player, int num_player, int player_num, Lvl *lvl);
+    void displaySky(SDL_Renderer *renderer, int num_player, int player_num, Lvl *lvl);
     void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, const int player_num, unsigned long frame_num, int mode, const int num_players);
     void displayHUD(SDL_Renderer *renderer, Player *player, int player_num, Lvl *lvl, Pictures *pictures, Fonts *fonts, int level_num, int num_player, unsigned long frame_num, Settings *settings);
-    void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures);
+    void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, Net *net, Fonts *fonts);
     void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net, FPSmanager *fps);
-    void waitGame(unsigned long *time1, unsigned long *time2, int delay);
-    int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings, const int num_player, int mode);
-    void mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster, int monsterIndex);
+    void waitGame(unsigned long *time1, unsigned long *time2, unsigned long delay);
+    int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Fonts *fonts, Settings *settings);
+    int mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster);
     void centerScrollingOnPlayer(Lvl *lvl, Player *player, int player_num, int num_player);
-    void gameOver(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, FPSmanager *fps);
+    void gameOver(SDL_Renderer *renderer, Fonts *fonts, Input *in, FPSmanager *fps);
     void displayWeather(SDL_Renderer *renderer, Weather *weather, int player_num, int num_player);
-    void setWeatherElement(Weather *weather, int elm_num, int is_initted);
+    void setWeatherElement(Weather *weather, int player_num, int elm_num, int is_initted, int num_players);
     void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Lvl *lvl, Input *in, FPSmanager *fps);
-    void createMonster(Lvl *lvl, Pictures *pictures, int x, int y, int lifes, int can_jump);
+    void createMonster(Lvl *lvl, Pictures *pictures, int x, int y, int lifes);
     void createMovingPlat(Lvl *lvl, int x, int y, const int num_player);
-    void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, unsigned long frame_num);
+    void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, int player_num, int num_player, Pictures *pictures, unsigned long frame_num);
     void displayMovingPlat(SDL_Renderer *renderer, Lvl *lvl, unsigned long frame_num, int player_num, int num_player);
     void updateMovingPlat(Lvl *lvl, Player *players[], const int num_players);
     void death(Player *player, int player_num, Sounds *sounds, Input *in, Settings *settings);
-    int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, Input *in, Fonts *fonts, SDL_Renderer *renderer, Settings *settings);
+    int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, Input *in, Settings *settings);
     int collide(Lvl *lvl, Player *player, MonsterList *currentMonster);
     int checkFall(Lvl *lvl, MonsterList *currentMonster);
     void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *pictures, Fonts *fonts, FPSmanager *fps);
@@ -182,11 +184,13 @@
     SDL_Texture* getScreenTexture(SDL_Renderer *renderer);
     void updateBullets(BulletList *bulletList, MonsterList *monsterList, Sounds *sounds, Lvl *lvl, Player *players[]);
     void createBullet(Player *player, int player_num, Lvl *lvl, Pictures *pictures);
-    void displayBullets(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures);
-    void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet);
+    void displayBullets(SDL_Renderer *renderer, Lvl *lvl, int player_num, int num_player, Pictures *pictures);
+    void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet, Fonts *fonts);
     void setLabel(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl, Player *player, int player_num, char *str);
     void displayLabel(SDL_Renderer *renderer, Player *player);
     int receive_thread(void *data);
     void teleport(Lvl *lvl, Player *player, int x, int y);
+    int getOffsetX(const int x, const int w, SDL_Rect *pos_dst);
+    int getOffsetY(const int y, const int h, SDL_Rect *pos_dst, int num_players, int player_num);
 
 #endif // GAME_H

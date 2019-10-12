@@ -9,7 +9,7 @@
 
 void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pictures *pictures, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     SDL_Texture *texture[NUM_TEXT_MULTI];
     SDL_Rect pos_dst[NUM_TEXT_MULTI];
     int escape = 0;

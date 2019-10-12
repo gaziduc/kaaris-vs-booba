@@ -1,7 +1,7 @@
 #ifndef OPTION_H
 #define OPTION_H
 
-    enum {MODE, COMMANDS, MUSIC_VOLUME, SFX_VOLUME, HAPTIC, NUM_OPTIONS};
+    enum {MODE, COMMANDS, MUSIC_VOLUME, SFX_VOLUME, HAPTIC, NICKNAME, NUM_OPTIONS};
 
     void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, Input *in, FPSmanager *fps);
     void destroyOptionsTexts(SDL_Texture *texture[NUM_OPTIONS]);

@@ -3,7 +3,7 @@
 #include "game.h"
 #include "editor.h"
 
-void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings, FPSmanager *fps)
+void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, FPSmanager *fps)
 {
     int escape = 0;
     int selected_tile = 1;
@@ -13,7 +13,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
     if(lvl == NULL)
         exit(EXIT_FAILURE);
 
-    loadLevel(renderer, 1, lvl, EDIT, settings);
+    loadLevel(renderer, 1, lvl, EDIT, 1);
 
     while(!escape)
     {
@@ -81,8 +81,8 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
 
             if(lvl->number + 1 <= NUM_LEVEL)
             {
-                freeLevel(lvl, EDIT);
-                loadLevel(renderer, lvl->number + 1, lvl, EDIT, settings);
+                freeLevel(lvl, EDIT, 1);
+                loadLevel(renderer, lvl->number + 1, lvl, EDIT, 1);
             }
         }
         if(in->key[SDL_SCANCODE_PAGEDOWN])
@@ -91,8 +91,8 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
 
             if(lvl->number - 1 > 0)
             {
-                freeLevel(lvl, EDIT);
-                loadLevel(renderer, lvl->number - 1, lvl, EDIT, settings);
+                freeLevel(lvl, EDIT, 1);
+                loadLevel(renderer, lvl->number - 1, lvl, EDIT, 1);
             }
         }
 
@@ -101,25 +101,27 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
         displayGame(renderer, pictures, lvl, NULL, 0, 0, EDIT, 1);
         displayHighligth(renderer, in, lvl);
         displayEditorHUD(renderer, fonts, lvl);
-        displaySelectedTile(renderer, lvl, in, pictures, selected_tile);
+        displaySelectedTile(renderer, lvl, in, selected_tile);
 
         SDL_RenderPresent(renderer);
         SDL_framerateDelay(fps);
     }
 
 
-    freeLevel(lvl, EDIT);
+    freeLevel(lvl, EDIT, 1);
     free(lvl);
 
     SDL_ShowCursor(SDL_DISABLE);
 }
 
 
-void displaySelectedTile(SDL_Renderer *renderer, Lvl *lvl, Input *in, Pictures *pictures, int selected_tile)
+void displaySelectedTile(SDL_Renderer *renderer, Lvl *lvl, Input *in, int selected_tile)
 {
     SDL_Texture *selected_texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TILE_SIZE, TILE_SIZE);
     SDL_SetTextureBlendMode(selected_texture, SDL_BLENDMODE_BLEND);
     SDL_SetRenderTarget(renderer, selected_texture);
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+    SDL_RenderClear(renderer);
 
     SDL_Rect pos_src;
     pos_src.x = selected_tile * TILE_SIZE;
@@ -176,7 +178,7 @@ void saveMap(Lvl *lvl)
 
 void displayEditorHUD(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl)
 {
-    SDL_Color color = {255, 0, 0};
+    SDL_Color color = {255, 0, 0, 255};
     char str[100] = "";
 
     sprintf(str, "NIVEAU %d", lvl->number);
@@ -203,7 +205,8 @@ void displayHighligth(SDL_Renderer *renderer, Input *in, Lvl *lvl)
     SDL_Texture *highligthed = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, TILE_SIZE, TILE_SIZE);
     SDL_SetRenderTarget(renderer, highligthed);
     SDL_SetTextureBlendMode(highligthed, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 255, 0, 255, 128);
+    SDL_SetTextureAlphaMod(highligthed, 128);
+    SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
     SDL_RenderFillRect(renderer, NULL);
     SDL_SetRenderTarget(renderer, NULL);
 

@@ -1,12 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL2_framerate.h>
+#if VERSION_INSTALL
+    #ifdef __WIN64__
+        #define WINVER 0x0600
+        #define _WIN32_WINNT 0x0600
+        #include <wchar.h>
+        #include <initguid.h>
+        #include <knownfolders.h>
+        #include <shlobj.h>
+        #include <objbase.h>
+        #include <fileapi.h>
+    #endif // __WIN64__
+#endif // VERSION_INSTALL
 #include "data.h"
 #include "game.h"
 #include "transition.h"
+#include "version.h"
 
 Fonts* loadFonts()
 {
@@ -96,17 +110,38 @@ Settings* loadSettings()
     if(settings == NULL)
         exit(EXIT_FAILURE);
 
-    FILE *file = fopen("settings.ini", "r");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"settings.ini", L"r");
+    #else
+        file = fopen("settings.ini", "r");
+    #endif
+
+
     if(file == NULL)
     {
         settings->fullscreen = 1;
         settings->music_volume = 128;
         settings->sfx_volume = 128;
         settings->haptic = 1;
+        sprintf(settings->nickname, "Player %d", rand() % 90000 + 10000);
+
+        saveSettings(settings);
     }
     else
     {
-        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume, &settings->haptic);
+        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume, &settings->haptic);
+        fgets(settings->nickname, sizeof(settings->nickname) / sizeof(settings->nickname[0]), file);
+
+        char *end = strchr(settings->nickname, '\r');
+        if(end != NULL)
+            *end = '\0';
+
+        end = strchr(settings->nickname, '\n');
+        if(end != NULL)
+            *end = '\0';
+
         fclose(file);
     }
 
@@ -119,14 +154,19 @@ Settings* loadSettings()
 
 void saveSettings(Settings *settings)
 {
-    FILE *file = fopen("settings.ini", "w");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"settings.ini", L"w");
+    #else
+        file = fopen("settings.ini", "w");
+    #endif
+
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\n", settings->fullscreen, settings->music_volume, settings->sfx_volume, settings->haptic);
+    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=%s\n", settings->fullscreen, settings->music_volume, settings->sfx_volume, settings->haptic, settings->nickname);
     fclose(file);
-
-    saveControls(settings->controls);
 }
 
 
@@ -136,7 +176,14 @@ void saveSettings(Settings *settings)
 
 void loadScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("scores.bin", "rb");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"scores.bin", L"rb");
+    #else
+        file = fopen("scores.bin", "rb");
+    #endif
+
     if(file == NULL)
     {
         for(int i = 0; i < NUM_SCORES; i++)
@@ -162,7 +209,14 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
 
 void saveScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("scores.bin", "wb");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"scores.bin", L"wb");
+    #else
+        file = fopen("scores.bin", "wb");
+    #endif
+
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -179,7 +233,14 @@ void saveScores(unsigned long scores[], char names[][NAME_LEN])
 
 void loadTimes(unsigned long times[])
 {
-    FILE *file = fopen("times.bin", "rb");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"times.bin", L"rb");
+    #else
+        file = fopen("times.bin", "rb");
+    #endif
+
     if(file == NULL)
     {
         for(int i = 0; i < NUM_TIMES; i++)
@@ -196,7 +257,14 @@ void loadTimes(unsigned long times[])
 
 void saveTimes(unsigned long times[])
 {
-    FILE *file = fopen("times.bin", "wb");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"times.bin", L"wb");
+    #else
+        file = fopen("times.bin", "wb");
+    #endif
+
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -213,9 +281,19 @@ Controls* loadControls()
     if(controls == NULL)
         exit(EXIT_FAILURE);
 
-    FILE *file = fopen("controls.ini", "r");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"controls.ini", L"r");
+    #else
+        file = fopen("controls.ini", "r");
+    #endif
+
     if(file == NULL)
+    {
         getDefaultControls(controls);
+        saveControls(controls);
+    }
     else
     {
         fscanf(file, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[0].power_up, &controls[1].left, &controls[1].right, &controls[1].jump, &controls[1].power_up);
@@ -243,7 +321,14 @@ void getDefaultControls(Controls *controls)
 
 void saveControls(Controls *controls)
 {
-    FILE *file = fopen("controls.ini", "w");
+    FILE *file = NULL;
+
+    #if VERSION_INSTALL
+        file = getLocalAppdataFile(L"controls.ini", L"w");
+    #else
+        file = fopen("controls.ini", "w");
+    #endif
+
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -256,7 +341,7 @@ void saveControls(Controls *controls)
 
 void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN], FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     SDL_Texture *texture[NUM_SCORES + 1];
     SDL_Rect pos_dst[NUM_SCORES + 1];
     char str[100] = "";
@@ -317,9 +402,9 @@ void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 
 
 
-void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], FPSmanager *fps)
+void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], int len, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int escape = 0;
     int frame = 0;
     SDL_Texture *texture[3];
@@ -369,8 +454,7 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
         }
 
 
-        if(strlen(str) + strlen(in->text) + 1 <= NAME_LEN)
-            strcat(str, in->text);
+        strncat(str, in->text, len - strlen(str) - 1);
 
         if(str[0] != '\0')
         {
@@ -439,4 +523,59 @@ void updateTimes(const int level_num, const unsigned long player_time)
 
     saveTimes(times);
 }
+
+#if VERSION_INSTALL
+    #ifdef __WIN64__
+
+        BOOL DirectoryExists(PWSTR dirName)
+        {
+            DWORD attribs = GetFileAttributesW(dirName);
+
+            if(attribs == INVALID_FILE_ATTRIBUTES)
+                return 0;
+
+            return (attribs & FILE_ATTRIBUTE_DIRECTORY);
+        }
+
+        BOOL FileExists(PWSTR szPath)
+        {
+            DWORD dwAttrib = GetFileAttributesW(szPath);
+
+            return (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+        }
+
+
+        FILE* getLocalAppdataFile(PWSTR filename, PWSTR mode)
+        {
+            PWSTR localappdata;
+            PWSTR foldername = L"Kaaris vs Booba";
+            PWSTR prep = L"\\\\?\\";
+            PWSTR separator = L"\\";
+
+            SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, NULL, &localappdata);
+
+            size_t size_of_str = wcslen(prep) + wcslen(localappdata) + wcslen(separator) + wcslen(foldername) +  wcslen(separator) + wcslen(filename) + wcslen(separator);
+            WCHAR str[size_of_str];
+            swprintf(str, size_of_str, L"%s%s\\%s", prep, localappdata, foldername);
+
+            if(!DirectoryExists(str))
+                CreateDirectoryW(str, NULL);
+
+            wcscat(str, separator);
+            wcscat(str, filename);
+
+            FILE *file = NULL;
+
+            if(mode[0] == L'w' || FileExists(str))
+                file = _wfopen(str, mode);
+
+            CoTaskMemFree(localappdata);
+
+            return file;
+        }
+
+    #endif // __WIN64__
+#endif // VERSION_INSTALL
+
+
 

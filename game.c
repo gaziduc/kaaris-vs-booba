@@ -18,7 +18,8 @@
 Packet other_packet;
 int receive;
 
-void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Settings *settings)
+
+void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players)
 {
     char str[200] = "";
     FILE *file = NULL;
@@ -34,13 +35,17 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
     if(lvl->weather == NULL)
         exit(EXIT_FAILURE);
 
-    fscanf(file, "[METADATA]\n");
-    fgets(str, sizeof(str) / sizeof(str[0]), file);
-
-    int size = strlen("name=");
+    fscanf(file, "[METADATA]\nname=");
     memset(lvl->name, '\0', sizeof(lvl->name));
-    for(int i = size; str[i] != '\r' && str[i] != '\n'; i++)
-        lvl->name[i - size] = str[i];
+    fgets(lvl->name, sizeof(lvl->name) / sizeof(lvl->name[0]), file);
+
+    char *end = strchr(lvl->name, '\r');
+    if(end != NULL)
+        *end = '\0';
+
+    end = strchr(lvl->name, '\n');
+    if(end != NULL)
+        *end = '\0';
 
     fscanf(file, "width=%d\nheight=%d\nsky=%s\ntileset=%s\ncollision=%s\nmusic=%s\nweather=%s\nweather_num_elm=%d\nweather_dir_x=[%d,%d]\nweather_dir_y=[%d,%d]\nin_water=%d\n\n[LEVEL]\n", &lvl->width, &lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, &lvl->weather->num_elm, &lvl->weather->dirXmin, &lvl->weather->dirXmax, &lvl->weather->dirYmin, &lvl->weather->dirYmax, &lvl->in_water);
 
@@ -105,21 +110,26 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
     fclose(file);
 
-    lvl->weather->pos_dst = malloc(lvl->weather->num_elm * sizeof(SDL_Rect));
-    if(lvl->weather->pos_dst == NULL)
-        exit(EXIT_FAILURE);
+    int num_elm_per_player = lvl->weather->num_elm / num_players;
 
-    lvl->weather->dirX = malloc(lvl->weather->num_elm * sizeof(int));
-    if(lvl->weather->dirX == NULL)
-        exit(EXIT_FAILURE);
+    for(int i = 0; i < num_players; i++)
+    {
+        lvl->weather->pos_dst[i] = malloc(num_elm_per_player * sizeof(SDL_Rect));
+        if(lvl->weather->pos_dst[i] == NULL)
+            exit(EXIT_FAILURE);
 
-    lvl->weather->dirY = malloc(lvl->weather->num_elm * sizeof(int));
-    if(lvl->weather->dirY == NULL)
-        exit(EXIT_FAILURE);
+        lvl->weather->dirX[i] = malloc(num_elm_per_player * sizeof(int));
+        if(lvl->weather->dirX[i] == NULL)
+            exit(EXIT_FAILURE);
 
-    lvl->weather->scale = malloc(lvl->weather->num_elm * sizeof(float));
-    if(lvl->weather->scale == NULL)
-        exit(EXIT_FAILURE);
+        lvl->weather->dirY[i] = malloc(num_elm_per_player * sizeof(int));
+        if(lvl->weather->dirY[i] == NULL)
+            exit(EXIT_FAILURE);
+
+        lvl->weather->scale[i] = malloc(num_elm_per_player * sizeof(float));
+        if(lvl->weather->scale[i] == NULL)
+            exit(EXIT_FAILURE);
+    }
 
     lvl->num_moving_plat = 0;
 
@@ -137,36 +147,37 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, Se
 
         Mix_PlayMusic(lvl->music, -1);
 
-        for(int i = 0; i < lvl->weather->num_elm; i++)
-            setWeatherElement(lvl->weather, i, 0);
+        for(int i = 0; i < num_players; i++)
+            for(int j = 0; j < num_elm_per_player; j++)
+                setWeatherElement(lvl->weather, i, j, 0, num_players);
     }
 }
 
 
-void setWeatherElement(Weather *weather, int elm_num, int is_initted)
+void setWeatherElement(Weather *weather, int player_num, int elm_num, int is_initted, int num_players)
 {
-    weather->pos_dst[elm_num].x = rand() % (int) WINDOW_W;
-    SDL_QueryTexture(weather->texture, NULL, NULL, &weather->pos_dst[elm_num].w, &weather->pos_dst[elm_num].h);
+    weather->pos_dst[player_num][elm_num].x = rand() % (int) WINDOW_W;
+    SDL_QueryTexture(weather->texture, NULL, NULL, &weather->pos_dst[player_num][elm_num].w, &weather->pos_dst[player_num][elm_num].h);
 
-    weather->scale[elm_num] = (float) rand() / RAND_MAX;
+    weather->scale[player_num][elm_num] = (float) rand() / RAND_MAX;
 
-    weather->pos_dst[elm_num].w *= weather->scale[elm_num];
-    if(weather->pos_dst[elm_num].w <= 0)
-        weather->pos_dst[elm_num].w = 1;
-    weather->pos_dst[elm_num].h *= weather->scale[elm_num];
-    if(weather->pos_dst[elm_num].h <= 0)
-        weather->pos_dst[elm_num].h = 1;
+    weather->pos_dst[player_num][elm_num].w *= weather->scale[player_num][elm_num];
+    if(weather->pos_dst[player_num][elm_num].w <= 0)
+        weather->pos_dst[player_num][elm_num].w = 1;
+    weather->pos_dst[player_num][elm_num].h *= weather->scale[player_num][elm_num];
+    if(weather->pos_dst[player_num][elm_num].h <= 0)
+        weather->pos_dst[player_num][elm_num].h = 1;
 
     if(is_initted)
-        weather->pos_dst[elm_num].y = -weather->pos_dst[elm_num].h;
+        weather->pos_dst[player_num][elm_num].y = -weather->pos_dst[player_num][elm_num].h + 1 + (WINDOW_H / num_players) * player_num;
     else
-        weather->pos_dst[elm_num].y = rand() % (int) WINDOW_H;
+        weather->pos_dst[player_num][elm_num].y = (rand() % (int) WINDOW_H / num_players) + (WINDOW_H / num_players) * player_num;
 
-    weather->dirX[elm_num] = (rand() % (weather->dirXmax - weather->dirXmin + 1)) + weather->dirXmin;
-    weather->dirY[elm_num] = (rand() % (weather->dirYmax - weather->dirYmin + 1)) + weather->dirYmin;
+    weather->dirX[player_num][elm_num] = (rand() % (weather->dirXmax - weather->dirXmin + 1)) + weather->dirXmin;
+    weather->dirY[player_num][elm_num] = (rand() % (weather->dirYmax - weather->dirYmin + 1)) + weather->dirYmin;
 }
 
-void freeLevel(Lvl *lvl, int mode)
+void freeLevel(Lvl *lvl, int mode, int num_players)
 {
     for(int x = 0; x < lvl->width; x++)
         free(lvl->map[x]);
@@ -190,11 +201,14 @@ void freeLevel(Lvl *lvl, int mode)
         Mix_FreeMusic(lvl->music);
     }
 
+    for(int i = 0; i < num_players; i++)
+    {
+        free(lvl->weather->pos_dst[i]);
+        free(lvl->weather->dirX[i]);
+        free(lvl->weather->dirY[i]);
+        free(lvl->weather->scale[i]);
+    }
 
-    free(lvl->weather->pos_dst);
-    free(lvl->weather->dirX);
-    free(lvl->weather->dirY);
-    free(lvl->weather->scale);
     SDL_DestroyTexture(lvl->weather->texture);
 
     free(lvl->weather);
@@ -203,26 +217,24 @@ void freeLevel(Lvl *lvl, int mode)
 
 void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, const int player_num, unsigned long frame_num, int mode, const int num_players)
 {
-    int x, y, mapX, x1, x2, mapY, y1, y2;
+    int mapX = lvl->startX[player_num] / TILE_SIZE;
+    int x1 = (lvl->startX[player_num] % TILE_SIZE) * -1;
+    int x2 = x1 + WINDOW_W + (x1 == 0 ? 0 : TILE_SIZE);
 
-    mapX = lvl->startX[player_num] / TILE_SIZE;
-    x1 = (lvl->startX[player_num] % TILE_SIZE) * -1;
-    x2 = x1 + WINDOW_W + (x1 == 0 ? 0 : TILE_SIZE);
+    int mapY = lvl->startY[player_num] / TILE_SIZE;
+    int y1 = (lvl->startY[player_num] % TILE_SIZE) * -1 + (WINDOW_H / num_players) * player_num;
+    int y2 = y1 + WINDOW_H / num_players + (y1 == 0 ? 0 : TILE_SIZE);
 
-    mapY = lvl->startY[player_num] / TILE_SIZE;
-    y1 = (lvl->startY[player_num] % TILE_SIZE) * -1 + (WINDOW_H / num_players) * player_num;
-    y2 = y1 + WINDOW_H / num_players + (y1 == 0 ? 0 : TILE_SIZE);
-
-    for (y = y1; y < y2; y += TILE_SIZE)
+    for (int y = y1; y < y2; y += TILE_SIZE)
     {
         mapX = lvl->startX[player_num] / TILE_SIZE;
 
-        for (x = x1; x < x2; x += TILE_SIZE)
+        for (int x = x1; x < x2; x += TILE_SIZE)
         {
             if(lvl->map[mapX][mapY] == MONSTER_NUM && mode == PLAY)
             {
-                 createMonster(lvl, pictures, mapX * TILE_SIZE, mapY * TILE_SIZE, (lvl->number == BOSS_1_LEVEL || lvl->number == BOSS_2_LEVEL) ? 10 : 1, 0);
-                 lvl->map[mapX][mapY] = 0;
+                createMonster(lvl, pictures, mapX * TILE_SIZE, mapY * TILE_SIZE, (lvl->number == BOSS_1_LEVEL || lvl->number == BOSS_2_LEVEL) ? 10 : 1);
+                lvl->map[mapX][mapY] = 0;
             }
             else if(lvl->map[mapX][mapY] == MOVING_PLAT_NUM && mode == PLAY)
             {
@@ -231,39 +243,25 @@ void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *p
             }
 
             SDL_Rect pos_dst;
-
-            int offsetX = 0;
-            if(x < 0)
-            {
-                pos_dst.x = 0;
-                offsetX = -x;
-            }
-            else
-                pos_dst.x = x;
-
-            int offsetY = 0;
-            if(y < (WINDOW_H / num_players) * player_num)
-            {
-                pos_dst.y = (WINDOW_H / num_players) * player_num;
-                offsetY = (WINDOW_H / num_players) * player_num - y;
-            }
-            else
-                pos_dst.y = y;
-
+            int offsetX = getOffsetX(x, TILE_SIZE, &pos_dst);
+            int offsetY = getOffsetY(y, TILE_SIZE, &pos_dst, num_players, player_num);
             pos_dst.w = TILE_SIZE - offsetX;
             pos_dst.h = TILE_SIZE - offsetY;
 
             SDL_Rect pos_src;
             pos_src.w = TILE_SIZE - offsetX;
             pos_src.h = TILE_SIZE - offsetY;
-            pos_src.x = lvl->map[mapX][mapY] * TILE_SIZE + offsetX;
-            pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE + offsetY;
+            pos_src.x = lvl->map[mapX][mapY] * TILE_SIZE;
+            if(pos_dst.x == 0)
+                pos_src.x += offsetX;
+            pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
+            if(pos_dst.y == (WINDOW_H / num_players) * player_num)
+                pos_src.y += offsetY;
 
             if(mode == PLAY && lvl->map[mapX][mapY] == CHECKPOINT_NUM && player->isCheckpointActive)
                 pos_src.x += TILE_SIZE;
 
             SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
-
 
             mapX++;
         }
@@ -308,8 +306,8 @@ void respawn(Player *player)
     }
     else
     {
-        player->pos.x = 70;
-        player->pos.y = 250;
+        player->pos.x = SPAWN_X;
+        player->pos.y = SPAWN_Y;
     }
 
     player->on_ground = 0;
@@ -324,7 +322,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 {
     SDL_Texture *texture[2];
     SDL_Rect pos_dst[2];
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     char str[100] = "";
     int escape = 0;
 
@@ -379,7 +377,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 
 void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int escape = 0, selected = 1, goToCenter = 0, modified = 0;
     unsigned long frame_num = 0;
     char str[100] = "";
@@ -423,6 +421,8 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
 
     transition(renderer, pictures->title, 6, texture, pos_dst, ENTERING, 1, fps);
 
+    Packet packet;
+
     while(!escape)
     {
         updateEvents(in);
@@ -431,9 +431,10 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
         {
             if(net != NULL)
             {
-                ChoosePacket packet;
-                packet.level_num = -1;
-                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+                packet.quit = 1;
+                packet.choosing = 1;
+                strcpy(packet.nickname, settings->nickname);
+                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
             }
 
             exit(EXIT_SUCCESS);
@@ -443,6 +444,7 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
             in->key[SDL_SCANCODE_ESCAPE] = 0;
             in->controller[0].buttons[6] = 0;
             in->controller[1].buttons[6] = 0;
+
             escape = 1;
         }
         if(KEY_LEFT_MENU)
@@ -487,9 +489,15 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
 
             if(net != NULL)
             {
-                ChoosePacket packet;
-                packet.level_num = selected;
-                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+                packet.lvl_num = selected;
+                packet.quit = 0;
+                packet.choosing = 1;
+                packet.frame = 0;
+                packet.point.x = SPAWN_X;
+                packet.point.y = SPAWN_Y;
+                packet.state = IDLE_RIGHT;
+                strcpy(packet.nickname, settings->nickname);
+                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
             }
 
             Mix_PlayChannel(-1, sounds->enter, 0);
@@ -557,6 +565,14 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
             modified = 0;
         }
 
+        if(net != NULL)
+        {
+            packet.quit = 0;
+            packet.choosing = 0;
+            strcpy(packet.nickname, settings->nickname);
+            SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+        }
+
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
 
@@ -596,7 +612,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
     if(lvl == NULL)
         exit(EXIT_FAILURE);
 
-    loadLevel(renderer, level_num, lvl, PLAY, settings);
+    loadLevel(renderer, level_num, lvl, PLAY, num_player);
     unsigned long frame_num = 0;
     int escape = 0, finished = 0;
     int lvl_finished[num_player];
@@ -687,8 +703,8 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
                 if(lvl->number < NUM_LEVEL)
                 {
                     level_num++;
-                    freeLevel(lvl, PLAY);
-                    loadLevel(renderer, level_num, lvl, PLAY, settings);
+                    freeLevel(lvl, PLAY, num_player);
+                    loadLevel(renderer, level_num, lvl, PLAY, num_player);
 
                     for(int i = 0; i < num_player; i++)
                     {
@@ -712,7 +728,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
 
         updateMovingPlat(lvl, player, num_player);
 
-        if(updateMonsters(lvl, player, num_player, sounds, in, fonts, renderer, settings)) // If the boss was killed
+        if(updateMonsters(lvl, player, num_player, sounds, in, settings)) // If the boss was killed
         {
             Mix_PlayChannel(-1, sounds->complete, 0);
             for(int i = 0; i < num_player; i++)
@@ -736,7 +752,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
                         player[i]->frame = 0;
                     }
                 }
-                if(KEY_RIGHT_GAME)
+                else if(KEY_RIGHT_GAME)
                 {
                     player[i]->direction = RIGHT;
                     player[i]->dirX = 4;
@@ -820,7 +836,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
             }
 
             if(!player[i]->dead)
-                if(mapCollisionPlayer(renderer, lvl, player[i], i, sounds, in, pictures, fonts, settings, num_player, mode))
+                if(mapCollisionPlayer(renderer, lvl, player[i], i, sounds, in, fonts, settings))
                 {
                     Mix_PlayChannel(-1, sounds->complete, 0);
                     lvl_finished[i] = 1;
@@ -832,18 +848,18 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
         for(int i = 0; i < num_player; i++)
         {
             centerScrollingOnPlayer(lvl, player[i], i, num_player);
-            displaySky(renderer, player[i], num_player, i, lvl);
+            displaySky(renderer, num_player, i, lvl);
             displayWeather(renderer, lvl->weather, i, num_player);
             displayGame(renderer, pictures, lvl, player[i], i, frame_num, PLAY, num_player);
-            displayMonsters(renderer, lvl, player[i], i, num_player, pictures, frame_num);
+            displayMonsters(renderer, lvl, i, num_player, pictures, frame_num);
             displayMovingPlat(renderer, lvl, frame_num, i, num_player);
-            displayBullets(renderer, lvl, player[i], i, num_player, pictures);
+            displayBullets(renderer, lvl, i, num_player, pictures);
             displayHUD(renderer, player[i], i, lvl, pictures, fonts, lvl->number, num_player, frame_num, settings);
             displayLabel(renderer, player[i]);
         }
 
         for(int i = 0; i < num_player; i++)
-            displayPlayer(renderer, lvl, player[i], i, num_player, pictures);
+            displayPlayer(renderer, lvl, player[i], i, num_player, pictures, net, fonts);
 
         if(net != NULL)
         {
@@ -852,10 +868,26 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
             packet.point.y = player[0]->pos.y;
             packet.state = player[0]->state;
             packet.frame = player[0]->frame;
+            packet.quit = escape;
+            packet.lvl_num = level_num;
+            packet.choosing = 0;
+            strcpy(packet.nickname, settings->nickname);
             sendPos(net, &packet);
 
-            displayOtherPlayer(renderer, lvl, player[0], other_packet);
+            if(other_packet.quit)
+                escape = 1;
+
+            displayOtherPlayer(renderer, lvl, player[0], other_packet, fonts);
         }
+
+        // Affichage de la barre qui sépare les deux semi-écrans
+        if(num_player == 2)
+        {
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+            SDL_RenderDrawLine(renderer, 0, WINDOW_H / 2 - 1, WINDOW_W - 1, WINDOW_H / 2 - 1);
+            SDL_RenderDrawLine(renderer, 0, WINDOW_H / 2, WINDOW_W - 1, WINDOW_H / 2);
+        }
+
 
         for(int i = 0; i < num_player; i++)
         {
@@ -865,7 +897,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
 
 
         SDL_RenderPresent(renderer);
-        SDL_framerateDelay(fps);
+        unsigned long delay = SDL_framerateDelay(fps);
 
         frame_num++;
 
@@ -894,7 +926,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
             }
 
             if(!lvl_finished[i])
-                player[i]->timer += APPR_DELAY_GAME;
+                player[i]->timer += delay;
         }
 
         for(int i = 0; i < num_player; i++)
@@ -902,7 +934,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
             if(num_player < 2 && player[i]->lifes <= 0 && !player[i]->dead)
             {
                 receive = 0;
-                gameOver(renderer, pictures, fonts, in, fps);
+                gameOver(renderer, fonts, in, fps);
                 escape = 1;
             }
 
@@ -912,7 +944,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
     }
 
 
-    freeLevel(lvl, PLAY);
+    freeLevel(lvl, PLAY, num_player);
     free(lvl);
 
     if(finished && num_player < 2)
@@ -926,27 +958,102 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
 }
 
 
-void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet)
+void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet, Fonts *fonts)
 {
+    SDL_Color red = {255, 0, 0, 255};
     SDL_Rect pos_dst;
-    pos_dst.x = packet.point.x - lvl->startX[0];
-    pos_dst.y = packet.point.y - lvl->startY[0];
-    pos_dst.w = PLAYER_W;
-    pos_dst.h = PLAYER_H;
 
-    SDL_Rect pos_src;
-    pos_src.x = (packet.frame / 2) * PLAYER_W;
-    pos_src.y = 0;
-    pos_src.w = PLAYER_W;
-    pos_src.h = PLAYER_H;
+    if(packet.lvl_num == lvl->number)
+    {
+        SDL_Texture *nickname = RenderTextBlended(renderer, fonts->ocraext_commands, packet.nickname, red);
 
-    SDL_SetTextureBlendMode(player->texture[packet.state], SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(player->texture[packet.state], 192);
-    SDL_RenderCopy(renderer, player->texture[packet.state], &pos_src, &pos_dst);
-    SDL_SetTextureAlphaMod(player->texture[packet.state], 255);
+        int x = packet.point.x - lvl->startX[0];
+        int y = packet.point.y - lvl->startY[0];
+
+        if(x + PLAYER_W - 1 >= 0 && x < WINDOW_W && y + PLAYER_H - 1 >= 0 && y < WINDOW_H)
+        {
+            int offsetX = getOffsetX(x, PLAYER_W, &pos_dst);
+            int offsetY = getOffsetY(y, PLAYER_H, &pos_dst, 1, 0);
+            pos_dst.w = PLAYER_W - offsetX;
+            pos_dst.h = PLAYER_H - offsetY;
+
+            SDL_Rect pos_src;
+            pos_src.x = packet.frame * PLAYER_W;
+            if(pos_dst.x == 0)
+                pos_src.x += offsetX;
+            pos_src.y = 0;
+            if(pos_dst.y == 0)
+                pos_src.y += offsetY;
+            pos_src.w = PLAYER_W - offsetX;
+            pos_src.h = PLAYER_H - offsetY;
+
+            SDL_SetTextureBlendMode(player->texture[packet.state], SDL_BLENDMODE_BLEND);
+            SDL_SetTextureAlphaMod(player->texture[packet.state], 192);
+            SDL_RenderCopy(renderer, player->texture[packet.state], &pos_src, &pos_dst);
+            SDL_SetTextureAlphaMod(player->texture[packet.state], 255);
+
+            pos_dst.y -= 30;
+            pos_dst.x += pos_dst.w / 2;
+            SDL_QueryTexture(nickname, NULL, NULL, &pos_dst.w, &pos_dst.h);
+            pos_dst.x -= pos_dst.w / 2;
+
+            if(pos_dst.x < 5)
+                pos_dst.x = 5;
+            else if(pos_dst.x + pos_dst.w >= WINDOW_W - 5)
+                pos_dst.x = WINDOW_W - pos_dst.w - 5;
+
+            if(pos_dst.y < 5)
+                pos_dst.y = 5;
+            else if(pos_dst.y + pos_dst.h >= WINDOW_H - 5)
+                pos_dst.y = WINDOW_H - pos_dst.h - 5;
+
+            SDL_RenderCopy(renderer, nickname, NULL, &pos_dst);
+        }
+        else
+        {
+            pos_dst.y = y - 30;
+            pos_dst.x = x + PLAYER_W / 2;
+            SDL_QueryTexture(nickname, NULL, NULL, &pos_dst.w, &pos_dst.h);
+            pos_dst.x -= pos_dst.w / 2;
+
+            if(pos_dst.x < 5)
+                pos_dst.x = 5;
+            else if(pos_dst.x + pos_dst.w >= WINDOW_W - 5)
+                pos_dst.x = WINDOW_W - pos_dst.w - 5;
+
+            if(pos_dst.y < 5)
+                pos_dst.y = 5;
+            else if(pos_dst.y + pos_dst.h >= WINDOW_H - 5)
+                pos_dst.y = WINDOW_H - pos_dst.h - 5;
+
+            SDL_RenderCopy(renderer, nickname, NULL, &pos_dst);
+        }
+
+        SDL_DestroyTexture(nickname);
+    }
+    else
+    {
+        char str[100];
+        sprintf(str, "%s : niveau %d", packet.nickname, packet.lvl_num);
+        SDL_Texture *nickname = RenderTextBlended(renderer, fonts->ocraext_commands, str, red);
+
+        SDL_QueryTexture(nickname, NULL, NULL, &pos_dst.w, &pos_dst.h);
+
+        if(packet.lvl_num < lvl->number)
+            pos_dst.x = 5;
+        else
+            pos_dst.x = WINDOW_W - pos_dst.w - 5;
+
+        pos_dst.y = WINDOW_H / 2 - pos_dst.h / 2;
+
+        SDL_RenderCopy(renderer, nickname, NULL, &pos_dst);
+        SDL_DestroyTexture(nickname);
+    }
+
+
 }
 
-void displaySky(SDL_Renderer *renderer, Player *player, int num_player, int player_num, Lvl *lvl)
+void displaySky(SDL_Renderer *renderer, int num_player, int player_num, Lvl *lvl)
 {
     SDL_Rect pos_src[2];
     SDL_Rect pos_dst[2];
@@ -980,7 +1087,7 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
     int escape = 0;
     SDL_Texture *texture[5];
     SDL_Rect pos_dst[5];
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     char str[200] = "";
 
     texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Score :", white);
@@ -1044,7 +1151,7 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
     loadScores(scores, names);
 
     memset(str, '\0', sizeof(str));
-    enterName(renderer, fonts, pictures, in, str, fps);
+    enterName(renderer, fonts, pictures, in, str, NAME_LEN, fps);
 
     int i = NUM_SCORES - 1;
     while(i >= 0 && score > scores[i])
@@ -1079,53 +1186,49 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
 
 void displayWeather(SDL_Renderer *renderer, Weather *weather, int player_num, int num_player)
 {
-    for(int i = 0; i < weather->num_elm; i++)
-    {
-        if(weather->pos_dst[i].y >= WINDOW_H || weather->pos_dst[i].x >= WINDOW_W || weather->pos_dst[i].x + weather->pos_dst[i].w < 0)
-            setWeatherElement(weather, i, 1);
-        else if(weather->pos_dst[i].y + weather->pos_dst[i].h >= (WINDOW_H / num_player) * player_num && weather->pos_dst[i].y < (WINDOW_H / num_player) * (player_num + 1))
-        {
-            weather->pos_dst[i].x += weather->dirX[i];
-            weather->pos_dst[i].y += weather->dirY[i];
-        }
+    int w, h;
+    SDL_QueryTexture(weather->texture, NULL, NULL, &w, &h);
 
-        if(weather->pos_dst[i].y + weather->pos_dst[i].h >= (WINDOW_H / num_player) * player_num && weather->pos_dst[i].y < (WINDOW_H / num_player) * (player_num + 1))
+    for(int i = 0; i < weather->num_elm / num_player; i++)
+    {
+        if(weather->pos_dst[player_num][i].y >= (WINDOW_H / num_player) * (player_num + 1) || weather->pos_dst[player_num][i].x >= WINDOW_W || weather->pos_dst[player_num][i].x + weather->pos_dst[player_num][i].w < 0)
+            setWeatherElement(weather, player_num, i, 1, num_player);
+
+        int x = weather->pos_dst[player_num][i].x;
+        int y = weather->pos_dst[player_num][i].y;
+
+        if(x + weather->pos_dst[player_num][i].w - 1 >= 0 && x < WINDOW_W && y + weather->pos_dst[player_num][i].h - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
         {
+            SDL_Rect pos_dst;
+            int offsetX = getOffsetX(x, weather->pos_dst[player_num][i].w, &pos_dst);
+            int offsetY = getOffsetY(y, weather->pos_dst[player_num][i].h, &pos_dst, num_player, player_num);
+            pos_dst.w = weather->pos_dst[player_num][i].w - offsetX;
+            pos_dst.h = weather->pos_dst[player_num][i].h - offsetY;
+
             SDL_Rect pos_src;
             pos_src.x = 0;
+            if(pos_dst.x == 0)
+                pos_src.x += offsetX;
+            pos_src.y = 0;
+            if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                pos_src.y += offsetY;
+            pos_src.w = w - offsetX;
+            pos_src.h = h - offsetY;
 
-            int w, h;
-            SDL_QueryTexture(weather->texture, NULL, NULL, &w, &h);
-
-            if(weather->pos_dst[i].y + weather->pos_dst[i].h >= (WINDOW_H / num_player) * player_num && weather->pos_dst[i].y < (WINDOW_H / num_player) * player_num)
-            {
-                pos_src.y = weather->pos_dst[i].y + weather->pos_dst[i].h - (WINDOW_H / num_player) * player_num;
-                pos_src.h = h - pos_src.y;
-
-                weather->pos_dst[i].y = (WINDOW_H / num_player) * player_num;
-                weather->pos_dst[i].h = pos_src.h * weather->scale[i];
-            }
-            else
-            {
-                pos_src.y = 0;
-                pos_src.h = h;
-            }
-
-            pos_src.w = w;
-
-            SDL_RenderCopy(renderer, weather->texture, &pos_src, &weather->pos_dst[i]);
-
-            weather->pos_dst[i].h = h * weather->scale[i];
+            SDL_RenderCopy(renderer, weather->texture, &pos_src, &pos_dst);
         }
+
+        weather->pos_dst[player_num][i].x += weather->dirX[player_num][i];
+        weather->pos_dst[player_num][i].y += weather->dirY[player_num][i];
     }
 }
 
 
 
 
-void gameOver(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, FPSmanager *fps)
+void gameOver(SDL_Renderer *renderer, Fonts *fonts, Input *in, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     SDL_Texture *texture[2];
 
     texture[0] = RenderTextBlended(renderer, fonts->preview_title, "GAME OVER", white);
@@ -1196,7 +1299,7 @@ void freePlayer(Player *player)
 
 void displayHUD(SDL_Renderer *renderer, Player *player, int player_num, Lvl *lvl, Pictures *pictures, Fonts *fonts, int level_num, int num_player, unsigned long frame_num, Settings *settings)
 {
-    SDL_Color color = {0, 255, 128};
+    SDL_Color color = {0, 255, 128, 255};
     SDL_Texture *texture = NULL;
     char str[100] = "";
     SDL_Rect pos_dst;
@@ -1298,10 +1401,15 @@ void displayHUD(SDL_Renderer *renderer, Player *player, int player_num, Lvl *lvl
 }
 
 
-void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures)
+void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, Net *net, Fonts *fonts)
 {
     SDL_Rect pos_src;
     SDL_Rect pos_dst;
+    SDL_Color green = {0, 255, 0, 255};
+    SDL_Texture *nickname;
+
+    if(net != NULL)
+        nickname = RenderTextBlended(renderer, fonts->ocraext_commands, "Vous", green);
 
     for(int i = 0; i < num_player; i++)
     {
@@ -1309,18 +1417,25 @@ void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_
         {
             if(player->invicibleFramesLeft < 0 || player->invicibleFramesLeft % 16 < 8)
             {
-                pos_src.x = player->frame * PLAYER_W;
-                pos_src.y = 0;
-                pos_src.w = PLAYER_W;
-                pos_src.h = PLAYER_H;
+                int x = player->pos.x - lvl->startX[i];
+                int y = player->pos.y - lvl->startY[i] + (WINDOW_H / 2) * i;
 
-                pos_dst.x = player->pos.x - lvl->startX[i];
-                pos_dst.y = player->pos.y - lvl->startY[i] + (WINDOW_H / 2) * i;
-                pos_dst.w = player->pos.w;
-                pos_dst.h = player->pos.h;
-
-                if(pos_dst.x + PLAYER_W >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + PLAYER_H >= (WINDOW_H / num_player) * i && pos_dst.y < (WINDOW_H / num_player) * (i + 1))
+                if(x + PLAYER_W - 1 >= 0 && x < WINDOW_W && y + PLAYER_H - 1 >= (WINDOW_H / num_player) * i && y < (WINDOW_H / num_player) * (i + 1))
                 {
+                    int offsetX = getOffsetX(x, PLAYER_W, &pos_dst);
+                    int offsetY = getOffsetY(y, PLAYER_H, &pos_dst, num_player, i);
+                    pos_dst.w = PLAYER_W - offsetX;
+                    pos_dst.h = PLAYER_H - offsetY;
+
+                    pos_src.x = player->frame * PLAYER_W;
+                    if(pos_dst.x == 0)
+                        pos_src.x += offsetX;
+                    pos_src.y = 0;
+                    if(pos_dst.y == (WINDOW_H / num_player) * i)
+                        pos_src.y += offsetY;
+                    pos_src.w = PLAYER_W - offsetX;
+                    pos_src.h = PLAYER_H - offsetY;
+
                     if(player_num != i)
                     {
                         SDL_SetTextureBlendMode(player->texture[player->state], SDL_BLENDMODE_BLEND);
@@ -1331,29 +1446,52 @@ void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_
 
                     if(player_num != i)
                         SDL_SetTextureAlphaMod(player->texture[player->state], 255);
+
+                    if(net != NULL)
+                    {
+                        pos_dst.y -= 30;
+                        pos_dst.x += pos_dst.w / 2;
+                        SDL_QueryTexture(nickname, NULL, NULL, &pos_dst.w, &pos_dst.h);
+                        pos_dst.x -= pos_dst.w / 2;
+
+                        if(pos_dst.x < 5)
+                            pos_dst.x = 5;
+                        else if(pos_dst.x + pos_dst.w >= WINDOW_W - 5)
+                            pos_dst.x = WINDOW_W - pos_dst.w - 5;
+
+                        if(pos_dst.y < 5)
+                            pos_dst.y = 5;
+                        else if(pos_dst.y + pos_dst.h >= WINDOW_H - 5)
+                            pos_dst.y = WINDOW_H - pos_dst.h - 5;
+
+                        SDL_RenderCopy(renderer, nickname, NULL, &pos_dst);
+                    }
                 }
             }
         }
         else
         {
-            pos_src.x = (player->frame_explosion / 8) * EXPLOSION_SIZE;
-            pos_src.y = 0;
-            pos_src.w = EXPLOSION_SIZE;
-            pos_src.h = EXPLOSION_SIZE;
+            int x = player->pos.x + PLAYER_W / 2 - EXPLOSION_SIZE / 2 - lvl->startX[i];
+            int y = player->pos.y + PLAYER_H / 2 - 25 - EXPLOSION_SIZE / 2 - lvl->startY[i] + (WINDOW_H / 2) * i; // - 25 pour qu'on voit Kaaris exploser quand il tombe tout en bas
 
-            pos_dst.x = player->pos.x + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startX[i];
-            pos_dst.y = player->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY[i] + (WINDOW_H / 2) * i;
-            pos_dst.w = EXPLOSION_SIZE;
-            pos_dst.h = EXPLOSION_SIZE;
-
-            if(pos_dst.y + EXPLOSION_SIZE >= (WINDOW_H / num_player) * (player_num + 1))
+            if(x + EXPLOSION_SIZE - 1 >= 0 && x < WINDOW_W && y + EXPLOSION_SIZE - 1 >= (WINDOW_H / num_player) * i && y < (WINDOW_H / num_player) * (i + 1))
             {
-                pos_dst.h = (WINDOW_H / num_player) * (player_num + 1) - pos_dst.y;
-                pos_src.h = pos_dst.h;
-            }
+                int offsetX = getOffsetX(x, EXPLOSION_SIZE, &pos_dst);
+                int offsetY = getOffsetY(y, EXPLOSION_SIZE, &pos_dst, num_player, i);
+                pos_dst.w = EXPLOSION_SIZE - offsetX;
+                pos_dst.h = EXPLOSION_SIZE - offsetY;
 
-            if(pos_dst.x + EXPLOSION_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + EXPLOSION_SIZE >= (WINDOW_H / num_player) * i && pos_dst.y < (WINDOW_H / num_player) * (i + 1))
+                pos_src.x = (player->frame_explosion / 8) * EXPLOSION_SIZE;
+                if(pos_dst.x == 0)
+                    pos_src.x += offsetX;
+                pos_src.y = 0;
+                if(pos_dst.y == (WINDOW_H / num_player) * i)
+                    pos_src.y += offsetY;
+                pos_src.w = EXPLOSION_SIZE - offsetX;
+                pos_src.h = EXPLOSION_SIZE - offsetY;
+
                 SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
+            }
 
             if(i == 0)
             {
@@ -1367,7 +1505,8 @@ void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_
         }
     }
 
-
+    if(net != NULL)
+        SDL_DestroyTexture(nickname);
 }
 
 
@@ -1376,26 +1515,35 @@ void displayMovingPlat(SDL_Renderer *renderer, Lvl *lvl, unsigned long frame_num
 {
     for(int i = 0; i < lvl->num_moving_plat; i++)
     {
-        SDL_Rect pos_src;
-        pos_src.x = MOVING_PLAT_NUM * TILE_SIZE;
-        pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
-        pos_src.w = TILE_SIZE;
-        pos_src.h = TILE_SIZE;
+        int x = lvl->moving_plat[i].pos.x - lvl->startX[player_num];
+        int y = lvl->moving_plat[i].pos.y - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
 
-        SDL_Rect pos_dst;
-        pos_dst.x = lvl->moving_plat[i].pos.x - lvl->startX[player_num];
-        pos_dst.y = lvl->moving_plat[i].pos.y - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
-        pos_dst.w = TILE_SIZE;
-        pos_dst.h = TILE_SIZE;
+        if(x + TILE_SIZE - 1 >= 0 && x < WINDOW_W && y + TILE_SIZE - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
+        {
+            SDL_Rect pos_dst;
+            int offsetX = getOffsetX(x, TILE_SIZE, &pos_dst);
+            int offsetY = getOffsetY(y, TILE_SIZE, &pos_dst, num_player, player_num);
+            pos_dst.w = TILE_SIZE - offsetX;
+            pos_dst.h = TILE_SIZE - offsetY;
 
-        if(pos_dst.x + TILE_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + TILE_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
+            SDL_Rect pos_src;
+            pos_src.x = MOVING_PLAT_NUM * TILE_SIZE;
+            if(pos_dst.x == 0)
+                pos_src.x += offsetX;
+            pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
+            if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                pos_src.y += offsetY;
+            pos_src.w = TILE_SIZE - offsetX;
+            pos_src.h = TILE_SIZE - offsetY;
+
             SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
+        }
     }
 }
 
 
 
-void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, unsigned long frame_num)
+void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, int player_num, int num_player, Pictures *pictures, unsigned long frame_num)
 {
     MonsterList *current = lvl->monsterList->next;
 
@@ -1406,46 +1554,79 @@ void displayMonsters(SDL_Renderer *renderer, Lvl *lvl, Player *player, int playe
 
         if(current->lifes > 0)
         {
+            int x = current->pos.x - lvl->startX[player_num];
+            int y = current->pos.y - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
+
             if(!current->is_boss)
             {
-                pos_src.x = MONSTER_NUM * TILE_SIZE;
-                pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
-                pos_src.w = TILE_SIZE;
-                pos_src.h = TILE_SIZE;
+                if(x + TILE_SIZE - 1 >= 0 && x < WINDOW_W && y + TILE_SIZE - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
+                {
+                    int offsetX = getOffsetX(x, TILE_SIZE, &pos_dst);
+                    int offsetY = getOffsetY(y, TILE_SIZE, &pos_dst, num_player, player_num);
+                    pos_dst.w = TILE_SIZE - offsetX;
+                    pos_dst.h = TILE_SIZE - offsetY;
 
-                pos_dst.x = current->pos.x - lvl->startX[player_num];
-                pos_dst.y = (current->pos.y - lvl->startY[player_num]) + (WINDOW_H / 2) * player_num;
-                pos_dst.w = TILE_SIZE;
-                pos_dst.h = TILE_SIZE;
+                    pos_src.x = MONSTER_NUM * TILE_SIZE;
+                    if(pos_dst.x == 0)
+                        pos_src.x += offsetX;
+                    pos_src.y = ((frame_num % (NUM_ANIM_TILE * NUM_FRAME_ANIM)) / NUM_FRAME_ANIM) * TILE_SIZE;
+                    if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                        pos_src.y += offsetY;
+                    pos_src.w = TILE_SIZE - offsetX;
+                    pos_src.h = TILE_SIZE - offsetY;
 
-                if(pos_dst.x + TILE_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + TILE_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
                     SDL_RenderCopy(renderer, lvl->tileset, &pos_src, &pos_dst);
+                }
             }
             else
             {
-                pos_dst.x = current->pos.x - lvl->startX[player_num];
-                pos_dst.y = (current->pos.y - lvl->startY[player_num]) + (WINDOW_H / 2) * player_num;
-                SDL_QueryTexture(pictures->boss, NULL, NULL, &pos_dst.w, &pos_dst.h);
+                int w, h;
+                SDL_QueryTexture(pictures->boss, NULL, NULL, &w, &h);
 
-                if(pos_dst.x + pos_dst.w >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + pos_dst.h >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
-                    SDL_RenderCopy(renderer, pictures->boss, NULL, &pos_dst);
+                if(x + w - 1 >= 0 && x < WINDOW_W && y + h - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
+                {
+                    int offsetX = getOffsetX(x, w, &pos_dst);
+                    int offsetY = getOffsetY(y, h, &pos_dst, num_player, player_num);
+                    pos_dst.w = w - offsetX;
+                    pos_dst.h = h - offsetY;
+
+                    pos_src.x = 0;
+                    if(pos_dst.x == 0)
+                        pos_src.x += offsetX;
+                    pos_src.y = 0;
+                    if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                        pos_src.y += offsetY;
+                    pos_src.w = w - offsetX;
+                    pos_src.h = h - offsetY;
+
+                    SDL_RenderCopy(renderer, pictures->boss, &pos_src, &pos_dst);
+                }
             }
         }
 
         if(current->frame_explosion >= 0)
         {
-            pos_src.x = (current->frame_explosion / 8) * EXPLOSION_SIZE;
-            pos_src.y = 0;
-            pos_src.w = EXPLOSION_SIZE;
-            pos_src.h = EXPLOSION_SIZE;
+            int x = current->pos.x + current->pos.w / 2 - EXPLOSION_SIZE / 2 - lvl->startX[player_num];
+            int y = current->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
 
-            pos_dst.x = current->pos.x + current->pos.w / 2 - EXPLOSION_SIZE / 2 - lvl->startX[player_num];
-            pos_dst.y = current->pos.y + TILE_SIZE / 2 - EXPLOSION_SIZE / 2 - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
-            pos_dst.w = EXPLOSION_SIZE;
-            pos_dst.h = EXPLOSION_SIZE;
+            if(x + EXPLOSION_SIZE - 1 >= 0 && x < WINDOW_W && y + EXPLOSION_SIZE - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
+            {
+                int offsetX = getOffsetX(x, EXPLOSION_SIZE, &pos_dst);
+                int offsetY = getOffsetY(y, EXPLOSION_SIZE, &pos_dst, num_player, player_num);
+                pos_dst.w = EXPLOSION_SIZE - offsetX;
+                pos_dst.h = EXPLOSION_SIZE - offsetY;
 
-            if(pos_dst.x + EXPLOSION_SIZE >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + EXPLOSION_SIZE >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
+                pos_src.x = (current->frame_explosion / 8) * EXPLOSION_SIZE;
+                if(pos_dst.x == 0)
+                    pos_src.x += offsetX;
+                pos_src.y = 0;
+                if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                    pos_src.y += offsetY;
+                pos_src.w = EXPLOSION_SIZE - offsetX;
+                pos_src.h = EXPLOSION_SIZE - offsetY;
+
                 SDL_RenderCopy(renderer, pictures->explosion, &pos_src, &pos_dst);
+            }
         }
 
         current = current->next;
@@ -1488,7 +1669,7 @@ void updateMovingPlat(Lvl *lvl, Player *player[], const int num_players)
 
 
 
-int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, Input *in, Fonts *fonts, SDL_Renderer *renderer, Settings *settings)
+int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, Input *in, Settings *settings)
 {
     int index = 0;
     MonsterList *current = lvl->monsterList->next;
@@ -1543,14 +1724,19 @@ int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, I
             }
 
             if(current->direction == LEFT)
-                current->dirX -= (lvl->number == BOSS_2_LEVEL) ? 14 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
+                current->dirX -= (lvl->number == BOSS_2_LEVEL) ? 12 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
             else
-                current->dirX += (lvl->number == BOSS_2_LEVEL) ? 14 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
+                current->dirX += (lvl->number == BOSS_2_LEVEL) ? 12 : (lvl->number == BOSS_1_LEVEL) ? 8 : 2;
 
 
             current->saveX = current->pos.x;
 
-            mapCollisionMonster(lvl, current, index);
+            if(!mapCollisionMonster(lvl, current))
+            {
+                current->lifes--;
+                current->frame_explosion = 0;
+                Mix_PlayChannel(-1, sounds->explosion, 0);
+            }
 
             for(int i = 0; i < num_player; i++)
             {
@@ -1607,7 +1793,7 @@ int collide(Lvl *lvl, Player *player, MonsterList *currentMonster)
 
 void displayBossLife(SDL_Renderer *renderer, Lvl *lvl, Fonts *fonts)
 {
-    SDL_Color color = {255, 0, 0};
+    SDL_Color color = {255, 0, 0, 255};
     SDL_Rect pos_dst;
 
     SDL_Texture *texture = RenderTextBlended(renderer, fonts->ocraext_message, "Booba ", color);
@@ -1623,10 +1809,13 @@ void displayBossLife(SDL_Renderer *renderer, Lvl *lvl, Fonts *fonts)
     {
         texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, lvl->monsterList->next->lifes * 114, 10);
         SDL_SetRenderTarget(renderer, texture);
+
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 255);
         SDL_RenderFillRect(renderer, NULL);
+
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderDrawRect(renderer, NULL);
+
         SDL_SetRenderTarget(renderer, NULL);
 
         SDL_QueryTexture(texture, NULL, NULL, &pos_dst.w, &pos_dst.h);
@@ -1638,44 +1827,25 @@ void displayBossLife(SDL_Renderer *renderer, Lvl *lvl, Fonts *fonts)
 
 int checkFall(Lvl *lvl, MonsterList *currentMonster)
  {
-    int x, y;
+    float x, y;
 
     if (currentMonster->direction == LEFT)
     {
-        x = (int) (currentMonster->pos.x + currentMonster->dirX) / TILE_SIZE;
-        y = (int) (currentMonster->pos.y + currentMonster->pos.h - 1) /  TILE_SIZE;
-        if (y < 0)
-            y = 1;
-        if (y >= lvl->height)
-            y = lvl->height;
-        if (x < 0)
-            x = 1;
-        if (x > lvl->width)
-            x = lvl->width;
-
-        if (x < lvl->width && y < lvl->height - 1 && !lvl->solid[lvl->map[x][y + 1]])
-            return 1;
-        else
-            return 0;
+        x = currentMonster->pos.x + currentMonster->dirX;
+        y = currentMonster->pos.y + currentMonster->pos.h - 1;
     }
     else
     {
-        x = (int)(currentMonster->pos.x + currentMonster->pos.w + currentMonster->dirX) / TILE_SIZE;
-        y = (int)(currentMonster->pos.y + currentMonster->pos.h - 1) / TILE_SIZE;
-        if (y <= 0)
-            y = 1;
-        if (y >= lvl->height)
-            y = lvl->height - 1;
-        if (x <= 0)
-            x = 1;
-        if (x >= lvl->width)
-            x = lvl->width - 1;
-
-        if (x < lvl->width && y < lvl->height - 1 && !lvl->solid[lvl->map[x][y + 1]])
-            return 1;
-        else
-            return 0;
+        x = currentMonster->pos.x + currentMonster->pos.w + currentMonster->dirX;
+        y = currentMonster->pos.y + currentMonster->pos.h - 1;
     }
+
+    if(x < 0)
+        return 1;
+    if(x >= lvl->width * TILE_SIZE)
+        return 1;
+
+    return !lvl->solid[lvl->map[(int) (x / TILE_SIZE)][(int) (y / TILE_SIZE + 1)]];
 }
 
 
@@ -1683,7 +1853,7 @@ int checkFall(Lvl *lvl, MonsterList *currentMonster)
 
 
 
-void waitGame(unsigned long *time1, unsigned long *time2, int delay)
+void waitGame(unsigned long *time1, unsigned long *time2, unsigned long delay)
 {
     *time2 = SDL_GetTicks();
     if(*time2 - *time1 < delay)
@@ -1748,7 +1918,7 @@ void centerScrollingOnPlayer(Lvl *lvl, Player *player, int player_num, int num_p
  }
 
 
-int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Pictures *pictures, Fonts *fonts, Settings *settings, const int num_player, int mode)
+int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Fonts *fonts, Settings *settings)
 {
     player->dirXmem = player->dirX;
     player->wasOnGround = player->on_ground;
@@ -2136,8 +2306,8 @@ int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const i
 
                 for(int j = 0; j < lvl->num_moving_plat; j++)
                 {
-                    if(player->pos.x + player->pos.w >= lvl->moving_plat[j].pos.x
-                    && player->pos.x <= lvl->moving_plat[j].pos.x + lvl->moving_plat[j].pos.w
+                    if(player->pos.x + player->pos.w > lvl->moving_plat[j].pos.x
+                    && player->pos.x < lvl->moving_plat[j].pos.x + lvl->moving_plat[j].pos.w
                     && player->pos.y + player->pos.h >= lvl->moving_plat[j].pos.y
                     && player->pos.y + player->pos.h < lvl->moving_plat[j].pos.y + lvl->moving_plat[j].pos.h)
                     {
@@ -2303,7 +2473,7 @@ int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const i
 
 void setLabel(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl, Player *player, int player_num, char *str)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
 
     player->label.texture = RenderTextBlended(renderer, fonts->ocraext_commands, str, white);
     SDL_QueryTexture(player->label.texture, NULL, NULL, &player->label.pos.w, &player->label.pos.h);
@@ -2325,7 +2495,7 @@ SDL_Texture* getScreenTexture(SDL_Renderer *renderer)
 }
 
 
-void mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster, int monsterIndex)
+int mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster)
 {
     int i, x1, x2, y1, y2;
 
@@ -2432,7 +2602,9 @@ void mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster, int monsterIndex
         currentMonster->pos.x = lvl->maxX - currentMonster->pos.w - 1;
 
     if(currentMonster->pos.y >= lvl->maxY)
-        removeMonsterFromIndex(lvl->monsterList, monsterIndex);
+        return 0;
+
+    return 1;
 }
 
 
@@ -2453,7 +2625,7 @@ void death(Player *player, int player_num, Sounds *sounds, Input *in, Settings *
 }
 
 
-void createMonster(Lvl *lvl, Pictures *pictures, int x, int y, int lifes, int can_jump)
+void createMonster(Lvl *lvl, Pictures *pictures, int x, int y, int lifes)
 {
     MonsterList *monsterList = malloc(sizeof(MonsterList));
     initMonsterList(monsterList);
@@ -2475,7 +2647,7 @@ void createMonster(Lvl *lvl, Pictures *pictures, int x, int y, int lifes, int ca
         SDL_QueryTexture(pictures->boss, NULL, NULL, &monsterList->pos.w, &monsterList->pos.h);
     }
 
-    monsterList->on_ground = 0;
+    monsterList->on_ground = 1;
     monsterList->frame_explosion = -1;
     monsterList->lifes = lifes;
     monsterList->dirX = 0;
@@ -2498,8 +2670,10 @@ void createMovingPlat(Lvl *lvl, int x, int y, const int num_player)
 
         lvl->moving_plat[lvl->num_moving_plat].beginX = x;
         lvl->moving_plat[lvl->num_moving_plat].beginY = y;
-        lvl->moving_plat[lvl->num_moving_plat].is_player_on[0] = 0;
-        lvl->moving_plat[lvl->num_moving_plat].is_player_on[1] = 0;
+
+        for(int i = 0; i < num_player; i++)
+            lvl->moving_plat[lvl->num_moving_plat].is_player_on[i] = 0;
+
         lvl->moving_plat[lvl->num_moving_plat].direction = RIGHT;
         lvl->moving_plat[lvl->num_moving_plat].endX = -1;
         lvl->moving_plat[lvl->num_moving_plat].endY = y;
@@ -2507,8 +2681,14 @@ void createMovingPlat(Lvl *lvl, int x, int y, const int num_player)
         while(lvl->moving_plat[lvl->num_moving_plat].endX == -1 && x < lvl->maxX)
         {
             x += TILE_SIZE;
-            if(lvl->map[x / TILE_SIZE][y / TILE_SIZE] == MOVING_PLAT_END_NUM)
-                lvl->moving_plat[lvl->num_moving_plat].endX = x;
+
+            if(x < lvl->maxX)
+            {
+                if(lvl->map[x / TILE_SIZE][y / TILE_SIZE] == MOVING_PLAT_END_NUM)
+                    lvl->moving_plat[lvl->num_moving_plat].endX = x;
+            }
+            else
+                break;
         }
 
         lvl->num_moving_plat++;
@@ -3006,20 +3186,46 @@ void updateBullets(BulletList *bulletList, MonsterList *monsterList, Sounds *sou
 
 
 
-void displayBullets(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures)
+void displayBullets(SDL_Renderer *renderer, Lvl *lvl, int player_num, int num_player, Pictures *pictures)
 {
+    SDL_Rect pos_dst;
+    SDL_Rect pos_src;
+
     BulletList *curBullet = lvl->bulletList->next;
 
     while(curBullet != NULL)
     {
-        SDL_Rect pos_dst;
-        pos_dst.x = curBullet->pos.x - lvl->startX[player_num];
-        pos_dst.y = curBullet->pos.y - lvl->startY[player_num] + player_num * WINDOW_H / 2;
-        pos_dst.w = curBullet->pos.w;
-        pos_dst.h = curBullet->pos.h;
+        int x = curBullet->pos.x - lvl->startX[player_num];
+        int y = curBullet->pos.y - lvl->startY[player_num] + (WINDOW_H / 2) * player_num;
 
-        if(pos_dst.x + pos_dst.w >= 0 && pos_dst.x < WINDOW_W && pos_dst.y + pos_dst.h >= (WINDOW_H / num_player) * player_num && pos_dst.y < (WINDOW_H / num_player) * (player_num + 1))
-            SDL_RenderCopy(renderer, curBullet->dirX < 0 ? pictures->bullet_left : pictures->bullet_right, NULL, &pos_dst);
+        if(x + curBullet->pos.w - 1 >= 0 && x < WINDOW_W && y + curBullet->pos.h - 1 >= (WINDOW_H / num_player) * player_num && y < (WINDOW_H / num_player) * (player_num + 1))
+        {
+            int offsetX = getOffsetX(x, curBullet->pos.w, &pos_dst);
+            int offsetY = getOffsetY(y, curBullet->pos.h, &pos_dst, num_player, player_num);
+            pos_dst.w = curBullet->pos.w - offsetX;
+            pos_dst.h = curBullet->pos.h - offsetY;
+
+            pos_src.x = 0;
+            if(pos_dst.x == 0)
+                pos_src.x += offsetX;
+            pos_src.y = 0;
+            if(pos_dst.y == (WINDOW_H / num_player) * player_num)
+                pos_src.y += offsetY;
+            pos_src.w = curBullet->pos.w - offsetX;
+            pos_src.h = curBullet->pos.h - offsetY;
+
+
+            if(curBullet->player_num != player_num)
+            {
+                SDL_SetTextureBlendMode(curBullet->dirX < 0 ? pictures->bullet_left : pictures->bullet_right, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureAlphaMod(curBullet->dirX < 0 ? pictures->bullet_left : pictures->bullet_right, 192);
+            }
+
+            SDL_RenderCopy(renderer, curBullet->dirX < 0 ? pictures->bullet_left : pictures->bullet_right, &pos_src, &pos_dst);
+
+            if(curBullet->player_num != player_num)
+                SDL_SetTextureAlphaMod(curBullet->dirX < 0 ? pictures->bullet_left : pictures->bullet_right, 255);
+        }
 
         curBullet = curBullet->next;
     }
@@ -3028,12 +3234,10 @@ void displayBullets(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player
 
 int receive_thread(void *data)
 {
-    unsigned long time1 = 0, time2 = 0;
-
     while(receive)
     {
         receivePos((Net*) data, &other_packet);
-        waitGame(&time1, &time2, APPR_DELAY_GAME);
+        SDL_Delay(1);
     }
 
     return 0;
@@ -3073,6 +3277,43 @@ void teleport(Lvl *lvl, Player *player, int x, int y)
                 return;
             }
         }
+    }
+}
+
+
+int getOffsetX(const int x, const int w, SDL_Rect *pos_dst)
+{
+    if(x < 0)
+    {
+        pos_dst->x = 0;
+        return (-x);
+    }
+    else
+    {
+        pos_dst->x = x;
+
+        if(x + w > WINDOW_W)
+            return (w - (WINDOW_W - x));
+
+        return 0;
+    }
+}
+
+int getOffsetY(const int y, const int h, SDL_Rect *pos_dst, int num_players, int player_num)
+{
+    if(y < (WINDOW_H / num_players) * player_num)
+    {
+        pos_dst->y = (WINDOW_H / num_players) * player_num;
+        return ((WINDOW_H / num_players) * player_num - y);
+    }
+    else
+    {
+        pos_dst->y = y;
+
+        if(y + h > (WINDOW_H / num_players) * (player_num + 1))
+            return (h - ((WINDOW_H / num_players) * (player_num + 1) - y));
+
+        return 0;
     }
 }
 

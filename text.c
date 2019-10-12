@@ -13,9 +13,9 @@ void intro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, 
         return;
     if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Gladiateur des temps modernes, montagne de testostérone,$il n'a fallu que quelques années pour forger la réputation$de cet être surhumain qui a gagné à la loterie génétique.$Zongo presse le pas, et commence à s'interroger sur son$avenir : s'il ne pouvait pas gravir les échelons de la$vieille Europe en plein émoi, il allait s'autoproclamer Roi,$et revétir un nouveau blason qui enverrait un message fort de$puissance. Il optera ainsi pour le pseudonyme \"Kaaris\" qui$signifie \"Roi des hommes\" en Ivoirien."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Invaincu en 78 combats menés clandestinement pour lesquels$il ne laisse aucune trace numérique par fierté, il décide à$contrecoeur d'accepter la proposition d'une exhibition$martiale d'un troubadour local. Et c'est en Décembre qu'il$révèlera au monde sa vraie nature, à coup de salades de$phalanges savamment placées par un tour de bras de 98 cm.$D'aucuns en ce monde n'est prêt pour tel spectacle."))
+    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Invaincu en 78 combats menés clandestinement pour lesquels$il ne laisse aucune trace numérique par fierté, il décide à$contrecoeur d'accepter la proposition d'une exhibition$martiale d'un troubadour local. Et c'est en Décembre qu'il$révèlera au monde sa vraie nature, à coup de salades de$phalanges savamment placées par un tour de bras de 98 cm.$Personne en ce monde n'est prêt pour tel spectacle."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Zongo le Dozo va réaliser son rêve, et son ennemi n'aura$le choix que de gouter à la subtile nuance salée de son$propre sang parfumé par la rage de Cocody."))
+    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Zongo le Dozo va réaliser son rêve, et son ennemi n'aura$le choix que de goûter à la subtile nuance salée de son$propre sang parfumé par la rage de Cocody."))
         return;
 }
 
@@ -25,7 +25,7 @@ void intro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, 
 
 int textIntro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, FPSmanager *fps, char *str)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int escape = 0;
     int current_max = 0;
     int len = strlen(str);

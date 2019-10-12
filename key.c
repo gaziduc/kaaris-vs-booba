@@ -12,7 +12,7 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
 {
     SDL_Texture *texture[NUM_KEYS];
     SDL_Rect pos_dst[NUM_KEYS];
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int escape = 0, player_selected = 0, player_modified = 0, key_selected = GO_LEFT;
     unsigned long frame_num = 0;
     char str[200] = "";
@@ -202,7 +202,7 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
 
 void changeKey(SDL_Renderer *renderer, SDL_Texture *texture, Settings *settings, Fonts *fonts, int player_num, int key)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     roundedBoxRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 10, 64, 64, 64, 245);
@@ -236,7 +236,7 @@ void changeKey(SDL_Renderer *renderer, SDL_Texture *texture, Settings *settings,
         else if(key == POWER_UP)
             settings->controls[player_num].power_up = scancode;
 
-        saveSettings(settings);
+        saveControls(settings->controls);
     }
 
     for(int i = 0; i < 2; i++)

@@ -35,7 +35,7 @@ int main(int argc, char *argv[])
     unsigned long frame_num = 0;
     SDL_Rect pos_dst[NUM_TEXT];
     SDL_Texture *texture[NUM_TEXT];
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int selected = SOLO;
     char str[256] = "";
 
@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     }
 
     initted = Mix_Init(mix_flags);
-    #ifdef WIN64
+    #ifdef __WIN64__
         if((initted & mix_flags) != mix_flags)
         {
             SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2_mixer", Mix_GetError(), window);
@@ -128,8 +128,8 @@ int main(int argc, char *argv[])
 
     texture[TITLE] = RenderTextBlended(renderer, fonts->preview_title, "Kaaris vs Booba", white);
     texture[SOLO] = RenderTextBlended(renderer, fonts->ocraext_message, "Solo", white);
-    texture[MULTIPLAYER] = RenderTextBlended(renderer, fonts->ocraext_message, "Multijoueurs", white);
-    texture[ONLINE] = RenderTextBlended(renderer, fonts->ocraext_message, "En ligne", white);
+    texture[MULTIPLAYER] = RenderTextBlended(renderer, fonts->ocraext_message, "Multi local", white);
+    texture[ONLINE] = RenderTextBlended(renderer, fonts->ocraext_message, "Multi en LAN", white);
     texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
@@ -223,7 +223,7 @@ int main(int argc, char *argv[])
         if(in->key[SDL_SCANCODE_F8])
         {
             in->key[SDL_SCANCODE_F8] = 0;
-            editor(renderer, in, pictures, fonts, settings, fps);
+            editor(renderer, in, pictures, fonts, fps);
         }
 
         SDL_RenderClear(renderer);

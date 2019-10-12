@@ -8,7 +8,7 @@
 
 void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int selected = 0;
     SDL_Texture *texture[MODES_NUM];
     SDL_Rect pos_dst[MODES_NUM];
@@ -45,6 +45,8 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
 
     transition(renderer, pictures->title, num_textures, texture, pos_dst, ENTERING, 1, fps);
 
+    Packet packet;
+
     while(!escape)
     {
         updateEvents(in);
@@ -53,21 +55,19 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
         {
             if(net != NULL)
             {
-                ChoosePacket packet;
-                packet.level_num = -1;
-                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+                packet.quit = 1;
+                packet.choosing = 1;
+                strcpy(packet.nickname, settings->nickname);
+                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
             }
 
             exit(EXIT_SUCCESS);
         }
         if(KEY_ESCAPE)
         {
-            if(net != NULL)
-            {
-                ChoosePacket packet;
-                packet.level_num = -1;
-                SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
-            }
+            in->key[SDL_SCANCODE_ESCAPE] = 0;
+            in->controller[0].buttons[6] = 0;
+            in->controller[1].buttons[6] = 0;
 
             escape = 1;
         }
@@ -129,9 +129,17 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
 
                 if(net != NULL)
                 {
-                    ChoosePacket packet;
-                    packet.level_num = 0;
-                    SDLNet_TCP_Send(net->client, &packet, sizeof(ChoosePacket));
+                    Packet packet;
+                    packet.accept = -1;
+                    packet.lvl_num = 0;
+                    packet.choosing = 1;
+                    packet.quit = 0;
+                    packet.frame = 0;
+                    packet.point.x = SPAWN_X;
+                    packet.point.y = SPAWN_Y;
+                    packet.state = IDLE_RIGHT;
+                    strcpy(packet.nickname, settings->nickname);
+                    SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
                 }
 
 
@@ -146,6 +154,15 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
 
 
             transition(renderer, pictures->title, num_textures, texture, pos_dst, EXITING, 1, fps);
+        }
+
+        if(net != NULL)
+        {
+            packet.accept = -1;
+            packet.choosing = escape;
+            packet.quit = escape;
+            strcpy(packet.nickname, settings->nickname);
+            SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
         }
 
 

@@ -96,6 +96,12 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
                     for(int i = 0; i < in->num_controller; i++)
                         SDL_HapticRumblePlay(in->controller[i].haptic, 0.5, 500);
             }
+            else if(selected == NICKNAME)
+            {
+                transition(renderer, pictures->title, NUM_OPTIONS, texture, pos_dst, ENTERING, 0, fps);
+                enterName(renderer, fonts, pictures, in, settings->nickname, NICKNAME_LEN, fps);
+                transition(renderer, pictures->title, NUM_OPTIONS, texture, pos_dst, EXITING, 1, fps);
+            }
 
             saveSettings(settings);
             destroyOptionsTexts(texture);
@@ -183,8 +189,7 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
 
     transition(renderer, pictures->title, NUM_OPTIONS, texture, pos_dst, EXITING, 0, fps);
 
-    for(int i = 0; i < NUM_OPTIONS; i++)
-        SDL_DestroyTexture(texture[i]);
+    destroyOptionsTexts(texture);
 }
 
 
@@ -199,7 +204,7 @@ void destroyOptionsTexts(SDL_Texture *texture[NUM_OPTIONS])
 void loadOptionsTexts(SDL_Renderer *renderer, Fonts *fonts, Settings *settings, SDL_Texture *texture[NUM_OPTIONS], SDL_Rect pos_dst[NUM_OPTIONS])
 {
     char str[100] = "";
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
 
     texture[MODE] = RenderTextBlended(renderer, fonts->ocraext_message, (settings->fullscreen) ? "Plein écran : Oui" : "Plein écran : Non", white);
 
@@ -213,11 +218,14 @@ void loadOptionsTexts(SDL_Renderer *renderer, Fonts *fonts, Settings *settings, 
 
     texture[HAPTIC] = RenderTextBlended(renderer, fonts->ocraext_message, (settings->haptic) ? "Vibrations manette : Oui" : "Vibrations manette : Non", white);
 
+    sprintf(str, "Pseudo en LAN : %s", settings->nickname);
+    texture[NICKNAME] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
+
     for(int i = 0; i < NUM_OPTIONS; i++)
     {
         SDL_QueryTexture(texture[i], NULL, NULL, &pos_dst[i].w, &pos_dst[i].h);
         pos_dst[i].x = WINDOW_W / 2 - pos_dst[i].w / 2;
-        pos_dst[i].y = 170 + (i * 80);
+        pos_dst[i].y = 130 + (i * 80);
     }
 }
 

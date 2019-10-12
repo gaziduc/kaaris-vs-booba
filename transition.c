@@ -80,7 +80,7 @@ void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_T
 
 void levelFinished(SDL_Renderer *renderer, Fonts *fonts, Player *player, int level_num, int num_player, int player_num, int lvl_finished[])
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     SDL_Texture *texture = NULL;
     SDL_Rect pos_dst;
     char str[100] = "";
@@ -128,7 +128,7 @@ void levelFinished(SDL_Renderer *renderer, Fonts *fonts, Player *player, int lev
 
 int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, FPSmanager *fps)
 {
-    SDL_Color white = {255, 255, 255};
+    SDL_Color white = {255, 255, 255, 255};
     int selected = RESUME;
     int escape = 0;
     unsigned long frame_num = 0;

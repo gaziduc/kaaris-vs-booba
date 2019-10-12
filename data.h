@@ -1,15 +1,22 @@
 #ifndef DATA_H
 #define DATA_H
 
+    #include <stdio.h>
     #include <SDL2/SDL.h>
     #include <SDL2/SDL_ttf.h>
     #include <SDL2/SDL_mixer.h>
     #include <SDL2/SDL2_framerate.h>
+    #if VERSION_INSTALL
+        #ifdef __WIN64__
+            #include <windows.h>
+        #endif
+    #endif // VERSION_INSTALL
     #include "event.h"
 
     #define NUM_SCORES      10
     #define NAME_LEN        11
     #define NUM_TIMES       (5 * NUM_LEVEL)
+    #define NICKNAME_LEN    17
 
     typedef struct
     {
@@ -67,6 +74,7 @@
         int sfx_volume;
         int haptic;
         Controls *controls;
+        char nickname[NICKNAME_LEN];
     } Settings;
 
 
@@ -83,9 +91,16 @@
     void loadScores(unsigned long scores[], char names[][NAME_LEN]);
     void saveScores(unsigned long scores[], char names[][NAME_LEN]);
     void displayScoreList(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, unsigned long scores[], char names[][NAME_LEN], FPSmanager *fps);
-    void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], FPSmanager *fps);
+    void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, char str[], int len, FPSmanager *fps);
     void loadTimes(unsigned long times[]);
     void saveTimes(unsigned long times[]);
     void updateTimes(const int level_num, const unsigned long player_time);
 
+    #if VERSION_INSTALL
+        #ifdef __WIN64__
+            BOOL DirectoryExists(PWSTR dirName);
+            BOOL FileExists(PWSTR szPath);
+            FILE* getLocalAppdataFile(PWSTR filename, PWSTR mode);
+        #endif // __WIN64__
+    #endif // VERSION_INSTALL
 #endif // DATA_H
