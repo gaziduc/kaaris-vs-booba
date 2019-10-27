@@ -322,6 +322,12 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 {
     SDL_Texture *texture[2];
     SDL_Rect pos_dst[2];
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
+
     SDL_Color white = {255, 255, 255, 255};
     char str[100] = "";
     int escape = 0;
@@ -360,7 +366,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
         SDL_RenderCopy(renderer, texture[0], NULL, &pos_dst[0]);
         SDL_RenderCopy(renderer, texture[1], NULL, &pos_dst[1]);
 
@@ -383,6 +389,11 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
     char str[100] = "";
     SDL_Texture *texture[8];
     SDL_Rect pos_dst[8];
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
     int visible[2];
     unsigned long times[NUM_TIMES];
     loadTimes(times);
@@ -574,7 +585,7 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         frame_num++;
         if(frame_num % 30 == 0)

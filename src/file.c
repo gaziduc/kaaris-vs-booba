@@ -12,6 +12,11 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
     int selected = 0;
     SDL_Texture *texture[MODES_NUM];
     SDL_Rect pos_dst[MODES_NUM];
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
     int escape = 0;
     unsigned long frame_num = 0;
     int num_textures;
@@ -167,7 +172,7 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         for(int i = 0; i < num_textures; i++)
         {

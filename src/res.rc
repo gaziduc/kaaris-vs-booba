@@ -1,4 +1,4 @@
-1 ICON "icon.ico"
+1 ICON "icon/icon.ico"
 
 #include <windows.h>
 #include "version.h"

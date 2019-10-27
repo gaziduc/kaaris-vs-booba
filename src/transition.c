@@ -8,6 +8,11 @@ void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_T
 {
     float speed = 0;
     int finished = 0;
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     if(number == 0)
         speed = 1;
@@ -27,13 +32,11 @@ void transition(SDL_Renderer *renderer, SDL_Texture *bg, int num_textures, SDL_T
     }
 
 
-
-
     while(!finished)
     {
         SDL_RenderClear(renderer);
 
-        SDL_RenderCopy(renderer, bg, NULL, NULL);
+        SDL_RenderCopy(renderer, bg, NULL, &pos_fs);
 
         if(number == 0)
             speed *= 1.2;
@@ -132,6 +135,11 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
     int selected = RESUME;
     int escape = 0;
     unsigned long frame_num = 0;
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     SDL_Texture *text[3];
     text[0] = RenderTextBlended(renderer, fonts->preview_title, "Pause", white);
@@ -213,7 +221,7 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderCopy(renderer, texture, NULL, &pos_fs);
 
         roundedBoxRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 10, 64, 64, 64, 192);
         roundedRectangleRGBA(renderer, WINDOW_W / 6, WINDOW_H / 4, (WINDOW_W / 6) * 5, (WINDOW_H / 4) * 3, 10, 255, 255, 255, 192);
@@ -242,6 +250,4 @@ int pauseGame(SDL_Renderer *renderer, SDL_Texture *texture, Pictures *pictures, 
 
     return escape;
 }
-
-
 

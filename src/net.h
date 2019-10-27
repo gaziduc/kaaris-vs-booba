@@ -45,6 +45,7 @@
     void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, IPaddress *ip, Net *net, Sounds *sounds, Settings *settings, FPSmanager *fps);
     int isIP(char *str);
     int isNullIP(char *str);
+    SDL_Texture* setErrorTexture(SDL_Renderer *renderer, Fonts *fonts, SDL_Rect *pos_dst, char *error);
     int waitingThread(void *data);
     int connectingThread(void *data);
     int acceptClient(SDL_Renderer *renderer, Fonts *fonts, Sounds *sounds, Pictures *pictures, FPSmanager *fps, Input *in, IPaddress *ip, char *nickname);

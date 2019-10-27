@@ -621,7 +621,7 @@ int isNullIP(char *str)
     return 1;
 }
 
-SDL_Texture* setErrorTexture(SDL_Renderer *renderer, Fonts *fonts, SDL_Rect *pos_dst, const char *error)
+SDL_Texture* setErrorTexture(SDL_Renderer *renderer, Fonts *fonts, SDL_Rect *pos_dst, char *error)
 {
     SDL_Color red = {255, 0, 0, 255};
 

@@ -14,6 +14,11 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
     SDL_Rect pos_dst[NUM_TEXT_MULTI];
     int escape = 0;
     char str[200] = "";
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     texture[START_GAME] = RenderTextBlended(renderer, fonts->ocraext_score, "APPUYEZ SUR ENTREE POUR COMMENCER !", white);
 
@@ -85,7 +90,7 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
         for(int i = 0; i < NUM_TEXT_MULTI; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 

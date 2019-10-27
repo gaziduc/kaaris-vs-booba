@@ -30,6 +30,11 @@ int textIntro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
     int current_max = 0;
     int len = strlen(str);
     int total_num_lines = 0;
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     // Compute number of lines in str
     for(int i = 0; str[i] != '\0'; i++)
@@ -70,7 +75,7 @@ int textIntro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         int index = 0;
         int line_num = 0;

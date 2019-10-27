@@ -19,6 +19,9 @@ enum {TITLE, SOLO, MULTIPLAYER, ONLINE, OPTIONS, QUIT, INFO, VERSION, NUM_TEXT};
 
 int main(int argc, char *argv[])
 {
+    (void) argc;
+    (void) argv;
+
     Input *in = NULL;
     SDL_Window *window = NULL;
     SDL_Renderer *renderer = NULL;
@@ -34,10 +37,15 @@ int main(int argc, char *argv[])
     Settings *settings;
     unsigned long frame_num = 0;
     SDL_Rect pos_dst[NUM_TEXT];
+    SDL_Rect pos_fs;
     SDL_Texture *texture[NUM_TEXT];
     SDL_Color white = {255, 255, 255, 255};
     int selected = SOLO;
     char str[256] = "";
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
 
     srand(time(NULL));
@@ -227,7 +235,7 @@ int main(int argc, char *argv[])
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         for(int i = TITLE; i < NUM_TEXT; i++)
         {

@@ -7,6 +7,11 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
 {
     int escape = 0;
     int selected_tile = 1;
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     SDL_ShowCursor(SDL_ENABLE);
     Lvl *lvl = malloc(sizeof(Lvl));
@@ -97,7 +102,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, lvl->sky, NULL, NULL);
+        SDL_RenderCopy(renderer, lvl->sky, NULL, &pos_fs);
         displayGame(renderer, pictures, lvl, NULL, 0, 0, EDIT, 1);
         displayHighligth(renderer, in, lvl);
         displayEditorHUD(renderer, fonts, lvl);

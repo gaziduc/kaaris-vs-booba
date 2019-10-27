@@ -13,7 +13,11 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
     SDL_Rect pos_dst[NUM_OPTIONS];
     int escape = 0, selected = 0;
     unsigned long frame_num = 0;
-
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     loadOptionsTexts(renderer, fonts, settings, texture, pos_dst);
     transition(renderer, pictures->title, NUM_OPTIONS, texture, pos_dst, ENTERING, 1, fps);
@@ -166,7 +170,7 @@ void displayOptions(SDL_Renderer *renderer, SDL_Window *window, Pictures *pictur
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         for(int i = 0; i < NUM_OPTIONS; i++)
         {
