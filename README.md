@@ -1,5 +1,5 @@
 # Kaaris vs Booba
-Pour plus d'informations sur le jeu Kaaris vs Booba, veuillez visiter le page web suivante : https://gamejolt.com/games/kaaris-vs-booba/390110
+Pour plus d'informations sur le jeu Kaaris vs Booba, veuillez visiter la page web suivante : https://gamejolt.com/games/kaaris-vs-booba/390110
 
 Si vous souhaitez compiler le code source vous-même sous Linux :
 1. Clonez ce repos
