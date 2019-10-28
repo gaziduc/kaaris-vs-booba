@@ -10,7 +10,7 @@ git clone https://github.com/gaziduc/kaaris-vs-booba.git
 ```
 cd kaaris-vs-booba
 ```
-3. compilez !
+3. Compilez !
 ```
 make
 ```
