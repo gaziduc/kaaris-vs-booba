@@ -7,6 +7,6 @@
 
     enum {ALL_LEVELS, ONE_LEVEL, SCORES, MODES_NUM};
 
-    void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps);
+    void selectMode(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps);
 
 #endif // FILE_H

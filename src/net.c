@@ -9,6 +9,7 @@
 #include "net.h"
 #include "transition.h"
 #include "file.h"
+#include "utils.h"
 
 char level_num;
 char quit;
@@ -17,7 +18,7 @@ int status;
 char error[256];
 char accept_con;
 
-void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
+void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
     unsigned long frame_num = 0;
     int escape = 0;
@@ -26,22 +27,23 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
     SDL_Rect pos_dst[3];
     SDL_Texture **ip_text = NULL;
     SDL_Color white = {255, 255, 255, 255};
-
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
     IPaddress ip;
     IPaddress *local_ips;
     SDLNet_ResolveHost(&ip, NULL, 3000);
-    Net *net = malloc(sizeof(Net));
+    Net *net = xmalloc(sizeof(Net), window);
     net->server = SDLNet_TCP_Open(&ip);
 
-    local_ips = malloc(sizeof(IPaddress) * MAX_IP_DISPLAYED);
-    if(local_ips == NULL)
-        exit(EXIT_FAILURE);
-
+    local_ips = xmalloc(sizeof(IPaddress) * MAX_IP_DISPLAYED, window);
     int num_ips = SDLNet_GetLocalAddresses(local_ips, MAX_IP_DISPLAYED);
 
     if(num_ips > 0)
     {
-        ip_text = malloc(sizeof(SDL_Texture*) * num_ips);
+        ip_text = xmalloc(sizeof(SDL_Texture*) * num_ips, window);
 
         for(int i = 0; i < num_ips; i++)
         {
@@ -93,7 +95,7 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
                 SDLNet_TCP_Send(net->client, &packet_to_send, sizeof(Packet));
 
                 Mix_PlayChannel(-1, sounds->enter, 0);
-                selectMode(renderer, pictures, fonts, in, sounds, music, settings, 1, net, fps);
+                selectMode(window, renderer, pictures, fonts, in, sounds, music, settings, 1, net, fps);
             }
             else
             {
@@ -120,7 +122,7 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         if(frame_num % 60 < 20)
             pos_dst[1].x = WINDOW_W / 2 - pos_dst[1].w / 2 - 20;
@@ -173,13 +175,18 @@ void createServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Inpu
 
 
 
-void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Settings *settings, FPSmanager *fps)
+void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Settings *settings, FPSmanager *fps)
 {
     int escape = 0, frame = 0;
     char str[MAX_IP_LEN] = "";
     SDL_Texture *texture[4];
     SDL_Rect pos_dst[4];
     SDL_Color white = {255, 255, 255, 255}, red = {255, 0, 0, 255};
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
 
     texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Entrez l'adresse IP de l'hôte :", white);
@@ -201,9 +208,10 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
 
     SDL_StartTextInput();
 
-    Connect *connect = malloc(sizeof(Connect));
-    connect->ip = malloc(sizeof(IPaddress));
-    connect->net = malloc(sizeof(Net));
+    Connect *connect = xmalloc(sizeof(Connect), window);
+    connect->ip = xmalloc(sizeof(IPaddress), window);
+    connect->net = xmalloc(sizeof(Net), window);
+
     strcpy(connect->nickname, settings->nickname);
 
 
@@ -287,7 +295,7 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
             Mix_PlayChannel(-1, sounds->enter, 0);
 
             transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0, fps);
-            waitingForServer(renderer, fonts, pictures, in, connect->ip, connect->net, sounds, settings, fps);
+            waitingForServer(window, renderer, fonts, pictures, in, connect->ip, connect->net, sounds, settings, fps);
             transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1, fps);
 
             SDLNet_TCP_Close(connect->net->client);
@@ -297,7 +305,7 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         if(status == CONNECTING)
         {
@@ -351,7 +359,7 @@ void connectToServer(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, I
 }
 
 
-void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
+void hostOrJoin(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
     unsigned long frame_num = 0;
     int escape = 0, selected = HOST;
@@ -359,7 +367,11 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
     SDL_Texture *texture[NUM_OPTIONS_NET];
     SDL_Rect pos_dst[NUM_OPTIONS_NET];
     SDL_Color white = {255, 255, 255, 255}, green = {0, 255, 0, 255};
-
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
     sprintf(str, "Content de vous revoir, %s", settings->nickname);
     char temp = str[0];
 
@@ -436,15 +448,15 @@ void hostOrJoin(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
             transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, ENTERING, 0, fps);
 
             if(selected == HOST)
-                createServer(renderer, pictures, fonts, in, sounds, music, settings, fps);
+                createServer(window, renderer, pictures, fonts, in, sounds, music, settings, fps);
             else if(selected == JOIN)
-                connectToServer(renderer, pictures, fonts, in, sounds, settings, fps);
+                connectToServer(window, renderer, pictures, fonts, in, sounds, settings, fps);
 
             transition(renderer, pictures->title, NUM_OPTIONS_NET, texture, pos_dst, EXITING, 1, fps);
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         if(frame_num <= strlen(str))
         {
@@ -497,7 +509,7 @@ void receivePos(Net *net, Packet *packet)
 }
 
 
-void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, IPaddress *ip, Net *net, Sounds *sounds, Settings *settings, FPSmanager *fps)
+void waitingForServer(SDL_Window *window, SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, IPaddress *ip, Net *net, Sounds *sounds, Settings *settings, FPSmanager *fps)
 {
     int escape = 0, accepted = 0;
     char str[128] = "";
@@ -505,6 +517,11 @@ void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, 
     SDL_Color white = {255, 255, 255, 255}, green = {0, 255, 0, 255};
     SDL_Texture *texture[3];
     SDL_Rect pos_dst[3];
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     unsigned int a, b, c, d;
     getIP(ip, &a, &b, &c, &d);
@@ -551,7 +568,7 @@ void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, 
         else if(level_num == 0)
         {
             transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
-            playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, 1, net, fps);
+            playGame(window, renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, 1, net, fps);
 
             SDL_CreateThread(waitingThread, "waitingThread", net);
             transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
@@ -559,8 +576,7 @@ void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, 
         else if(level_num > 0 && level_num <= NUM_LEVEL)
         {
             transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
-            playGame(renderer, in, pictures, fonts, sounds, settings, level_num, ONE_LEVEL, 1, net, fps);
-
+            playGame(window, renderer, in, pictures, fonts, sounds, settings, level_num, ONE_LEVEL, 1, net, fps);
 
             SDL_CreateThread(waitingThread, "waitingThread", net);
             transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
@@ -588,7 +604,7 @@ void waitingForServer(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, 
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
         for(int i = 0; i < 3; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
 
@@ -642,6 +658,11 @@ int acceptClient(SDL_Renderer *renderer, Fonts *fonts, Sounds *sounds, Pictures 
     SDL_Texture *texture[NUM_TEXT_REQUEST];
     SDL_Rect pos_dst[NUM_TEXT_REQUEST];
     unsigned long frame_num = 0;
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     unsigned int a, b, c, d;
     getIP(ip, &a, &b, &c, &d);
@@ -711,7 +732,7 @@ int acceptClient(SDL_Renderer *renderer, Fonts *fonts, Sounds *sounds, Pictures 
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         roundedBoxRGBA(renderer, WINDOW_W / 8, WINDOW_H / 4, (WINDOW_W / 8) * 7, (WINDOW_H / 4) * 3, 10, 64, 64, 64, 192);
         roundedRectangleRGBA(renderer, WINDOW_W / 8, WINDOW_H / 4, (WINDOW_W / 8) * 7, (WINDOW_H / 4) * 3, 10, 255, 255, 255, 192);

@@ -6,11 +6,6 @@
     #include <SDL2/SDL_ttf.h>
     #include <SDL2/SDL_mixer.h>
     #include <SDL2/SDL2_framerate.h>
-    #if VERSION_INSTALL
-        #ifdef __WIN64__
-            #include <windows.h>
-        #endif
-    #endif // VERSION_INSTALL
     #include "event.h"
 
     #define NUM_SCORES      10
@@ -78,13 +73,13 @@
     } Settings;
 
 
-    Fonts* loadFonts();
+    Fonts* loadFonts(SDL_Window *window);
     SDL_Texture* RenderTextBlended(SDL_Renderer *renderer, TTF_Font *font, char *str, SDL_Color fg);
     void BlitRenderTextBlended(SDL_Renderer *renderer, TTF_Font *font, char *str, SDL_Color fg, const int x, const int y);
-    Pictures* loadPictures(SDL_Renderer *renderer);
-    Sounds* loadSounds();
-    Settings* loadSettings();
-    Controls* loadControls();
+    Pictures* loadPictures(SDL_Renderer *renderer, SDL_Window *window);
+    Sounds* loadSounds(SDL_Window *window);
+    Settings* loadSettings(SDL_Window *window);
+    Controls* loadControls(SDL_Window *window);
     void getDefaultControls(Controls *controls);
     void saveSettings(Settings *settings);
     void saveControls(Controls *controls);
@@ -96,11 +91,4 @@
     void saveTimes(unsigned long times[]);
     void updateTimes(const int level_num, const unsigned long player_time);
 
-    #if VERSION_INSTALL
-        #ifdef __WIN64__
-            BOOL DirectoryExists(PWSTR dirName);
-            BOOL FileExists(PWSTR szPath);
-            FILE* getLocalAppdataFile(PWSTR filename, PWSTR mode);
-        #endif // __WIN64__
-    #endif // VERSION_INSTALL
 #endif // DATA_H

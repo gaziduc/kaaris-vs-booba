@@ -6,7 +6,7 @@
 #include "transition.h"
 
 
-void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
+void selectMode(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255, 255};
     int selected = 0;
@@ -127,7 +127,7 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
                 displayScoreList(renderer, pictures, fonts, in, scores, names, fps);
             }
             else if(selected == ONE_LEVEL)
-                map(renderer, in, pictures, fonts, sounds, music, settings, num_player, net, fps);
+                map(window, renderer, in, pictures, fonts, sounds, music, settings, num_player, net, fps);
             else
             {
                 transition(renderer, pictures->title, num_textures, texture, pos_dst, ENTERING, 0, fps);
@@ -151,7 +151,7 @@ void selectMode(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input 
                 Mix_HaltMusic();
                 Mix_FreeMusic(*music);
 
-                playGame(renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, num_player, net, fps);
+                playGame(window, renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, num_player, net, fps);
 
                 *music = Mix_LoadMUS("data/musics/menu.mp3");
                 Mix_PlayMusic(*music, -1);

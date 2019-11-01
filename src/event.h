@@ -38,7 +38,7 @@
         char mousebutton[5];
         int mouseX, mouseY;
         int wheelY;
-        char text[8];
+        char text[33];
         Controller controller[2];
         int controller_num[2];
         int num_controller;

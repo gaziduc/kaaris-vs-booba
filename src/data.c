@@ -5,28 +5,15 @@
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <SDL2/SDL2_framerate.h>
-#if VERSION_INSTALL
-    #ifdef __WIN64__
-        #define WINVER 0x0600
-        #define _WIN32_WINNT 0x0600
-        #include <wchar.h>
-        #include <initguid.h>
-        #include <knownfolders.h>
-        #include <shlobj.h>
-        #include <objbase.h>
-        #include <fileapi.h>
-    #endif // __WIN64__
-#endif // VERSION_INSTALL
 #include "data.h"
 #include "game.h"
 #include "transition.h"
 #include "version.h"
+#include "utils.h"
 
-Fonts* loadFonts()
+Fonts* loadFonts(SDL_Window *window)
 {
-    Fonts *fonts = malloc(sizeof(Fonts));
-    if(fonts == NULL)
-        exit(EXIT_FAILURE);
+    Fonts *fonts = xmalloc(sizeof(Fonts), window);
 
     fonts->preview_title = TTF_OpenFont("data/fonts/preview.otf", 65);
     fonts->preview_intro = TTF_OpenFont("data/fonts/preview.otf", 25);
@@ -63,11 +50,9 @@ void BlitRenderTextBlended(SDL_Renderer *renderer, TTF_Font *font, char *str, SD
 }
 
 
-Pictures* loadPictures(SDL_Renderer *renderer)
+Pictures* loadPictures(SDL_Renderer *renderer, SDL_Window *window)
 {
-    Pictures *pictures = malloc(sizeof(Pictures));
-    if(pictures == NULL)
-        exit(EXIT_FAILURE);
+    Pictures *pictures = xmalloc(sizeof(Pictures), window);
 
     pictures->HUDlife = IMG_LoadTexture(renderer, "data/gfx/life.bmp");
     pictures->HUDcoin = IMG_LoadTexture(renderer, "data/gfx/coin.png");
@@ -82,9 +67,9 @@ Pictures* loadPictures(SDL_Renderer *renderer)
 }
 
 
-Sounds* loadSounds()
+Sounds* loadSounds(SDL_Window *window)
 {
-    Sounds *sounds = malloc(sizeof(Sounds));
+    Sounds *sounds = xmalloc(sizeof(Sounds), window);
 
     sounds->death = Mix_LoadWAV("data/sfx/death.wav");
     sounds->bumper = Mix_LoadWAV("data/sfx/bumper.wav");
@@ -104,20 +89,11 @@ Sounds* loadSounds()
 }
 
 
-Settings* loadSettings()
+Settings* loadSettings(SDL_Window *window)
 {
-    Settings *settings = malloc(sizeof(Settings));
-    if(settings == NULL)
-        exit(EXIT_FAILURE);
+    Settings *settings = xmalloc(sizeof(Settings), window);
 
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"settings.ini", L"r");
-    #else
-        file = fopen("settings.ini", "r");
-    #endif
-
+    FILE *file = fopen("settings.ini", "r");
 
     if(file == NULL)
     {
@@ -145,7 +121,7 @@ Settings* loadSettings()
         fclose(file);
     }
 
-    settings->controls = loadControls();
+    settings->controls = loadControls(window);
 
     return settings;
 }
@@ -154,13 +130,7 @@ Settings* loadSettings()
 
 void saveSettings(Settings *settings)
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"settings.ini", L"w");
-    #else
-        file = fopen("settings.ini", "w");
-    #endif
+    FILE *file = fopen("settings.ini", "w");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
@@ -176,13 +146,7 @@ void saveSettings(Settings *settings)
 
 void loadScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"scores.bin", L"rb");
-    #else
-        file = fopen("scores.bin", "rb");
-    #endif
+    FILE *file = fopen("scores.bin", "rb");
 
     if(file == NULL)
     {
@@ -209,13 +173,7 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
 
 void saveScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"scores.bin", L"wb");
-    #else
-        file = fopen("scores.bin", "wb");
-    #endif
+    FILE *file = fopen("scores.bin", "wb");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
@@ -233,13 +191,7 @@ void saveScores(unsigned long scores[], char names[][NAME_LEN])
 
 void loadTimes(unsigned long times[])
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"times.bin", L"rb");
-    #else
-        file = fopen("times.bin", "rb");
-    #endif
+    FILE *file = fopen("times.bin", "rb");
 
     if(file == NULL)
     {
@@ -257,13 +209,7 @@ void loadTimes(unsigned long times[])
 
 void saveTimes(unsigned long times[])
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"times.bin", L"wb");
-    #else
-        file = fopen("times.bin", "wb");
-    #endif
+    FILE *file = fopen("times.bin", "wb");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
@@ -275,19 +221,11 @@ void saveTimes(unsigned long times[])
 }
 
 
-Controls* loadControls()
+Controls* loadControls(SDL_Window *window)
 {
-    Controls *controls = malloc(sizeof(Controls) * 2);
-    if(controls == NULL)
-        exit(EXIT_FAILURE);
+    Controls *controls = xmalloc(sizeof(Controls) * 2, window);
 
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"controls.ini", L"r");
-    #else
-        file = fopen("controls.ini", "r");
-    #endif
+    FILE *file = fopen("controls.ini", "r");
 
     if(file == NULL)
     {
@@ -321,13 +259,7 @@ void getDefaultControls(Controls *controls)
 
 void saveControls(Controls *controls)
 {
-    FILE *file = NULL;
-
-    #if VERSION_INSTALL
-        file = getLocalAppdataFile(L"controls.ini", L"w");
-    #else
-        file = fopen("controls.ini", "w");
-    #endif
+    FILE *file = fopen("controls.ini", "w");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
@@ -409,6 +341,11 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
     int frame = 0;
     SDL_Texture *texture[3];
     SDL_Rect pos_dst[3];
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Entrez votre nom :", white);
     SDL_QueryTexture(texture[0], NULL, NULL, &pos_dst[0].w, &pos_dst[0].h);
@@ -470,7 +407,7 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
 
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         for(int i = 0; i < 3; i++)
             if(i == 0 || (i == 2 && str[0] != '\0') || (i == 1 && frame < 30))
@@ -523,59 +460,3 @@ void updateTimes(const int level_num, const unsigned long player_time)
 
     saveTimes(times);
 }
-
-#if VERSION_INSTALL
-    #ifdef __WIN64__
-
-        BOOL DirectoryExists(PWSTR dirName)
-        {
-            DWORD attribs = GetFileAttributesW(dirName);
-
-            if(attribs == INVALID_FILE_ATTRIBUTES)
-                return 0;
-
-            return (attribs & FILE_ATTRIBUTE_DIRECTORY);
-        }
-
-        BOOL FileExists(PWSTR szPath)
-        {
-            DWORD dwAttrib = GetFileAttributesW(szPath);
-
-            return (dwAttrib != INVALID_FILE_ATTRIBUTES && !(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
-        }
-
-
-        FILE* getLocalAppdataFile(PWSTR filename, PWSTR mode)
-        {
-            PWSTR localappdata;
-            PWSTR foldername = L"Kaaris vs Booba";
-            PWSTR prep = L"\\\\?\\";
-            PWSTR separator = L"\\";
-
-            SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, NULL, &localappdata);
-
-            size_t size_of_str = wcslen(prep) + wcslen(localappdata) + wcslen(separator) + wcslen(foldername) +  wcslen(separator) + wcslen(filename) + wcslen(separator);
-            WCHAR str[size_of_str];
-            swprintf(str, size_of_str, L"%s%s\\%s", prep, localappdata, foldername);
-
-            if(!DirectoryExists(str))
-                CreateDirectoryW(str, NULL);
-
-            wcscat(str, separator);
-            wcscat(str, filename);
-
-            FILE *file = NULL;
-
-            if(mode[0] == L'w' || FileExists(str))
-                file = _wfopen(str, mode);
-
-            CoTaskMemFree(localappdata);
-
-            return file;
-        }
-
-    #endif // __WIN64__
-#endif // VERSION_INSTALL
-
-
-

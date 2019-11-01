@@ -14,6 +14,7 @@
 #include "multi.h"
 #include "text.h"
 #include "version.h"
+#include "utils.h"
 
 enum {TITLE, SOLO, MULTIPLAYER, ONLINE, OPTIONS, QUIT, INFO, VERSION, NUM_TEXT};
 
@@ -103,15 +104,13 @@ int main(int argc, char *argv[])
         exit(EXIT_FAILURE);
     }
 
-    in = malloc(sizeof(Input));
-    if(in == NULL)
-        exit(EXIT_FAILURE);
+    in = xmalloc(sizeof(Input), window);
     memset(in, 0, sizeof(*in));
 
-    fonts = loadFonts();
-    pictures = loadPictures(renderer);
-    sounds = loadSounds();
-    settings = loadSettings();
+    fonts = loadFonts(window);
+    pictures = loadPictures(renderer, window);
+    sounds = loadSounds(window);
+    settings = loadSettings(window);
 
     Mix_VolumeMusic(settings->music_volume);
     setSfxVolume(sounds, settings->sfx_volume);
@@ -123,10 +122,7 @@ int main(int argc, char *argv[])
     if(settings->fullscreen)
         SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN);
 
-    fps = malloc(sizeof(FPSmanager));
-    if(fps == NULL)
-        exit(EXIT_FAILURE);
-
+    fps = xmalloc(sizeof(FPSmanager), window);
     SDL_initFramerate(fps);
     SDL_setFramerate(fps, 30);
 
@@ -217,11 +213,11 @@ int main(int argc, char *argv[])
                 transition(renderer, pictures->title, NUM_TEXT, texture, pos_dst, ENTERING, 0, fps);
 
                 if(selected == SOLO)
-                    selectMode(renderer, pictures, fonts, in, sounds, &music, settings, 1, NULL, fps);
+                    selectMode(window, renderer, pictures, fonts, in, sounds, &music, settings, 1, NULL, fps);
                 else if(selected == MULTIPLAYER)
-                    selectMultiCommandType(renderer, in, fonts, pictures, sounds, &music, settings, fps);
+                    selectMultiCommandType(window, renderer, in, fonts, pictures, sounds, &music, settings, fps);
                 else if(selected == ONLINE)
-                    hostOrJoin(renderer, pictures, fonts, in, sounds, &music, settings, fps);
+                    hostOrJoin(window, renderer, pictures, fonts, in, sounds, &music, settings, fps);
                 else if(selected == OPTIONS)
                     displayOptions(renderer, window, pictures, fonts, sounds, settings, in, fps);
 
@@ -231,7 +227,7 @@ int main(int argc, char *argv[])
         if(in->key[SDL_SCANCODE_F8])
         {
             in->key[SDL_SCANCODE_F8] = 0;
-            editor(renderer, in, pictures, fonts, fps);
+            editor(window, renderer, in, pictures, fonts, fps);
         }
 
         SDL_RenderClear(renderer);

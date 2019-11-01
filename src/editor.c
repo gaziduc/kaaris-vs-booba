@@ -2,8 +2,9 @@
 #include <SDL2/SDL.h>
 #include "game.h"
 #include "editor.h"
+#include "utils.h"
 
-void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, FPSmanager *fps)
+void editor(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, FPSmanager *fps)
 {
     int escape = 0;
     int selected_tile = 1;
@@ -14,11 +15,8 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
     pos_fs.h = WINDOW_H;
 
     SDL_ShowCursor(SDL_ENABLE);
-    Lvl *lvl = malloc(sizeof(Lvl));
-    if(lvl == NULL)
-        exit(EXIT_FAILURE);
-
-    loadLevel(renderer, 1, lvl, EDIT, 1);
+    Lvl *lvl = xmalloc(sizeof(Lvl), window);
+    loadLevel(window, renderer, 1, lvl, EDIT, 1);
 
     while(!escape)
     {
@@ -87,7 +85,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
             if(lvl->number + 1 <= NUM_LEVEL)
             {
                 freeLevel(lvl, EDIT, 1);
-                loadLevel(renderer, lvl->number + 1, lvl, EDIT, 1);
+                loadLevel(window, renderer, lvl->number + 1, lvl, EDIT, 1);
             }
         }
         if(in->key[SDL_SCANCODE_PAGEDOWN])
@@ -97,7 +95,7 @@ void editor(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts,
             if(lvl->number - 1 > 0)
             {
                 freeLevel(lvl, EDIT, 1);
-                loadLevel(renderer, lvl->number - 1, lvl, EDIT, 1);
+                loadLevel(window, renderer, lvl->number - 1, lvl, EDIT, 1);
             }
         }
 

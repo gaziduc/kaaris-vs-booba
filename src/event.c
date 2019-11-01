@@ -9,11 +9,11 @@ void updateEvents(Input* in)
     memset(in->text, '\0', sizeof(in->text));
     SDL_Event event;
 
-	while(SDL_PollEvent(&event))
-	{
-		switch(event.type)
-		{
-		    case SDL_QUIT:
+    while(SDL_PollEvent(&event))
+    {
+        switch(event.type)
+        {
+            case SDL_QUIT:
                 in->quit = 1;
                 break;
             case SDL_TEXTINPUT:
@@ -91,8 +91,8 @@ void updateEvents(Input* in)
                 break;
             default:
                 break;
-		}
-	}
+        }
+    }
 }
 
 
@@ -103,17 +103,17 @@ int getKey()
     int key;
 
     while(SDL_PollEvent(&event) || !escape)
-	{
-	    switch(event.type)
-	    {
-	        case SDL_KEYDOWN:
+    {
+        switch(event.type)
+        {
+            case SDL_KEYDOWN:
                 key = event.key.keysym.scancode;
                 escape = 1;
                 break;
-	    }
-	}
+        }
+    }
 
-	return key;
+    return key;
 }
 
 

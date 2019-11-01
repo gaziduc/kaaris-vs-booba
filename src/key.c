@@ -16,6 +16,11 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
     int escape = 0, player_selected = 0, player_modified = 0, key_selected = GO_LEFT;
     unsigned long frame_num = 0;
     char str[200] = "";
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     texture[HEADER] = RenderTextBlended(renderer, fonts->ocraext_message, "Joueur 1                       Joueur 2", white);
 
@@ -171,7 +176,7 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
 
         SDL_Rect pos_arrow;
@@ -203,8 +208,14 @@ void displayKeys(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input
 void changeKey(SDL_Renderer *renderer, SDL_Texture *texture, Settings *settings, Fonts *fonts, int player_num, int key)
 {
     SDL_Color white = {255, 255, 255, 255};
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
+
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_RenderCopy(renderer, texture, NULL, &pos_fs);
     roundedBoxRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 10, 64, 64, 64, 245);
     roundedRectangleRGBA(renderer, (int) WINDOW_W / 4, (int) WINDOW_H / 4, ((int) WINDOW_W / 4) * 3, ((int) WINDOW_H / 4) * 3, 10, 255, 255, 255, 245);
 

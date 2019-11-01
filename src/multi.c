@@ -7,7 +7,7 @@
 #include "transition.h"
 #include "file.h"
 
-void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pictures *pictures, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
+void selectMultiCommandType(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *fonts, Pictures *pictures, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255, 255};
     SDL_Texture *texture[NUM_TEXT_MULTI];
@@ -69,7 +69,7 @@ void selectMultiCommandType(SDL_Renderer *renderer, Input *in, Fonts *fonts, Pic
             Mix_PlayChannel(-1, sounds->enter, 0);
 
             transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, ENTERING, 0, fps);
-            selectMode(renderer, pictures, fonts, in, sounds, music, settings, 2, NULL, fps);
+            selectMode(window, renderer, pictures, fonts, in, sounds, music, settings, 2, NULL, fps);
             transition(renderer, pictures->title, NUM_TEXT_MULTI, texture, pos_dst, EXITING, 1, fps);
         }
 

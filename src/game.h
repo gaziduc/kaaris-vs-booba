@@ -147,8 +147,8 @@
         Label label;
     } Player;
 
-    void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps);
-    void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players);
+    void map(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps);
+    void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players);
     void freeLevel(Lvl *lvl, int mode, int num_players);
     void freePlayer(Player *player);
     void respawn(Player *player);
@@ -156,7 +156,7 @@
     void displayGame(SDL_Renderer *renderer, Pictures *pictures, Lvl *lvl, Player *player, const int player_num, unsigned long frame_num, int mode, const int num_players);
     void displayHUD(SDL_Renderer *renderer, Player *player, int player_num, Lvl *lvl, Pictures *pictures, Fonts *fonts, int level_num, int num_player, unsigned long frame_num, Settings *settings);
     void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_num, int num_player, Pictures *pictures, Net *net, Fonts *fonts);
-    void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net, FPSmanager *fps);
+    void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net, FPSmanager *fps);
     void waitGame(unsigned long *time1, unsigned long *time2, unsigned long delay);
     int mapCollisionPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, const int player_num, Sounds *sounds, Input *in, Fonts *fonts, Settings *settings);
     int mapCollisionMonster(Lvl *lvl, MonsterList *currentMonster);

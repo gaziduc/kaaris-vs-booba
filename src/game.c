@@ -13,13 +13,14 @@
 #include "text.h"
 #include "list.h"
 #include "file.h"
+#include "utils.h"
 
 
 Packet other_packet;
 int receive;
 
 
-void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players)
+void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players)
 {
     char str[200] = "";
     FILE *file = NULL;
@@ -31,9 +32,7 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, in
 
     lvl->number = lvl_num;
 
-    lvl->weather = malloc(sizeof(Weather));
-    if(lvl->weather == NULL)
-        exit(EXIT_FAILURE);
+    lvl->weather = xmalloc(sizeof(Weather), window);
 
     fscanf(file, "[METADATA]\nname=");
     memset(lvl->name, '\0', sizeof(lvl->name));
@@ -61,16 +60,9 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, in
     if(lvl->weather->texture == NULL)
         exit(EXIT_FAILURE);
 
-    lvl->map = malloc(sizeof(int*) * lvl->width);
-    if(lvl->map == NULL)
-        exit(EXIT_FAILURE);
-
+    lvl->map = xmalloc(sizeof(int*) * lvl->width, window);
     for(int x = 0; x < lvl->width; x++)
-    {
-        lvl->map[x] = malloc(sizeof(int) * lvl->height);
-        if(lvl->map[x] == NULL)
-            exit(EXIT_FAILURE);
-    }
+        lvl->map[x] = xmalloc(sizeof(int) * lvl->height, window);
 
     for(int y = 0; y < lvl->height; y++)
     {
@@ -98,9 +90,7 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, in
         exit(EXIT_FAILURE);
 
     fscanf(file, "num_tiles=%d\n", &lvl->num_tiles);
-    lvl->solid = malloc(sizeof(char) * lvl->num_tiles);
-    if(lvl->solid == NULL)
-        exit(EXIT_FAILURE);
+    lvl->solid = xmalloc(sizeof(char) * lvl->num_tiles, window);
 
     for(int i = 0; i < lvl->num_tiles; i++)
     {
@@ -114,38 +104,26 @@ void loadLevel(SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, in
 
     for(int i = 0; i < num_players; i++)
     {
-        lvl->weather->pos_dst[i] = malloc(num_elm_per_player * sizeof(SDL_Rect));
-        if(lvl->weather->pos_dst[i] == NULL)
-            exit(EXIT_FAILURE);
-
-        lvl->weather->dirX[i] = malloc(num_elm_per_player * sizeof(int));
-        if(lvl->weather->dirX[i] == NULL)
-            exit(EXIT_FAILURE);
-
-        lvl->weather->dirY[i] = malloc(num_elm_per_player * sizeof(int));
-        if(lvl->weather->dirY[i] == NULL)
-            exit(EXIT_FAILURE);
-
-        lvl->weather->scale[i] = malloc(num_elm_per_player * sizeof(float));
-        if(lvl->weather->scale[i] == NULL)
-            exit(EXIT_FAILURE);
+        lvl->weather->pos_dst[i] = xmalloc(num_elm_per_player * sizeof(SDL_Rect), window);
+        lvl->weather->dirX[i] = xmalloc(num_elm_per_player * sizeof(int), window);
+        lvl->weather->dirY[i] = xmalloc(num_elm_per_player * sizeof(int), window);
+        lvl->weather->scale[i] = xmalloc(num_elm_per_player * sizeof(float), window);
     }
 
     lvl->num_moving_plat = 0;
 
     if(mode == PLAY)
     {
-        lvl->monsterList = malloc(sizeof(MonsterList));
+        lvl->monsterList = xmalloc(sizeof(MonsterList), window);
         initMonsterList(lvl->monsterList);
 
-        lvl->bulletList = malloc(sizeof(BulletList));
+        lvl->bulletList = xmalloc(sizeof(BulletList), window);
         initBulletList(lvl->bulletList);
 
         lvl->music = Mix_LoadMUS(lvl->music_filename);
-        if(lvl->music == NULL)
-            exit(EXIT_FAILURE);
 
-        Mix_PlayMusic(lvl->music, -1);
+        if (lvl->music)
+            Mix_PlayMusic(lvl->music, -1);
 
         for(int i = 0; i < num_players; i++)
             for(int j = 0; j < num_elm_per_player; j++)
@@ -197,8 +175,11 @@ void freeLevel(Lvl *lvl, int mode, int num_players)
         removeAllBullets(lvl->bulletList);
         free(lvl->bulletList);
 
-        Mix_HaltMusic();
-        Mix_FreeMusic(lvl->music);
+        if (lvl->music)
+        {
+            Mix_HaltMusic();
+            Mix_FreeMusic(lvl->music);
+        }
     }
 
     for(int i = 0; i < num_players; i++)
@@ -381,7 +362,7 @@ void displayLevelName(SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, 
 }
 
 
-void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
+void map(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Mix_Music **music, Settings *settings, const int num_player, Net *net, FPSmanager *fps)
 {
     SDL_Color white = {255, 255, 255, 255};
     int escape = 0, selected = 1, goToCenter = 0, modified = 0;
@@ -518,7 +499,7 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
             Mix_HaltMusic();
             Mix_FreeMusic(*music);
 
-            playGame(renderer, in, pictures, fonts, sounds, settings, selected, ONE_LEVEL, num_player, net, fps);
+            playGame(window, renderer, in, pictures, fonts, sounds, settings, selected, ONE_LEVEL, num_player, net, fps);
 
             *music = Mix_LoadMUS("data/musics/menu.mp3");
             Mix_PlayMusic(*music, -1);
@@ -617,13 +598,10 @@ void map(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, So
 }
 
 
-void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net, FPSmanager *fps)
+void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, Settings *settings, int level_num, const int mode, const int num_player, Net *net, FPSmanager *fps)
 {
-    Lvl *lvl = malloc(sizeof(Lvl));
-    if(lvl == NULL)
-        exit(EXIT_FAILURE);
-
-    loadLevel(renderer, level_num, lvl, PLAY, num_player);
+    Lvl *lvl = xmalloc(sizeof(Lvl), window);
+    loadLevel(window, renderer, level_num, lvl, PLAY, num_player);
     unsigned long frame_num = 0;
     int escape = 0, finished = 0;
     int lvl_finished[num_player];
@@ -638,7 +616,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
     Player *player[num_player];
     for(int i = 0; i < num_player; i++)
     {
-        player[i] = malloc(sizeof(Player));
+        player[i] = xmalloc(sizeof(Player), window);
         initPlayer(renderer, player[i]);
         player[i]->timer = 0;
     }
@@ -715,7 +693,7 @@ void playGame(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
                 {
                     level_num++;
                     freeLevel(lvl, PLAY, num_player);
-                    loadLevel(renderer, level_num, lvl, PLAY, num_player);
+                    loadLevel(window, renderer, level_num, lvl, PLAY, num_player);
 
                     for(int i = 0; i < num_player; i++)
                     {
@@ -1100,6 +1078,11 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
     SDL_Rect pos_dst[5];
     SDL_Color white = {255, 255, 255, 255};
     char str[200] = "";
+    SDL_Rect pos_fs;
+    pos_fs.x = 0;
+    pos_fs.y = 0;
+    pos_fs.w = WINDOW_W;
+    pos_fs.h = WINDOW_H;
 
     texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, "Score :", white);
     sprintf(str, "%d vies x 1000 = %d", player->lifes, player->lifes * 1000);
@@ -1141,7 +1124,7 @@ void displayScore(SDL_Renderer *renderer, Player *player, Input *in, Pictures *p
         }
 
         SDL_RenderClear(renderer);
-        SDL_RenderCopy(renderer, pictures->title, NULL, NULL);
+        SDL_RenderCopy(renderer, pictures->title, NULL, &pos_fs);
 
         for(int i = 0; i < 5; i++)
             SDL_RenderCopy(renderer, texture[i], NULL, &pos_dst[i]);
@@ -2493,12 +2476,14 @@ void setLabel(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl, Player *player, in
     player->label.pos.y = player->pos.y - lvl->startY[player_num] - player->label.pos.h - 10 + player_num * (WINDOW_H / 2);
 }
 
+
+
 SDL_Texture* getScreenTexture(SDL_Renderer *renderer)
 {
     SDL_RenderPresent(renderer);
 
-    SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, WINDOW_W, WINDOW_H, 32, SDL_PIXELFORMAT_ABGR8888);
-    SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ABGR8888, surface->pixels, surface->pitch);
+    SDL_Surface *surface = SDL_CreateRGBSurface(0, WINDOW_W, WINDOW_H, 32, 0, 0, 0, 0);
+    SDL_RenderReadPixels(renderer, NULL, surface->format->format, surface->pixels, surface->pitch);
     SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
     SDL_FreeSurface(surface);
 
