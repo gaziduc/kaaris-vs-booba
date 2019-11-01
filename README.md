@@ -3,7 +3,7 @@
 You need to have the following libraries installed to play Kaaris vs Booba on Linux:
 ```
 sdl2
-sdl2_images
+sdl2_image
 sdl2_ttf
 sdl2_mixer
 sdl2_gfx
