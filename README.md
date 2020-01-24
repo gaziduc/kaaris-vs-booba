@@ -1,4 +1,7 @@
 # Kaaris vs Booba
+This is a 2D platformer game where your goal is to destroy Booba.
+
+![](https://s5.gifyu.com/images/3-3kj9szcf.png)
 ## Prerequisites
 You need to have the following libraries installed to play Kaaris vs Booba on Linux:
 ```
