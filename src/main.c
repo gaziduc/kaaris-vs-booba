@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <time.h>
+#include <stdlib.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
 #include <SDL2/SDL_net.h>
@@ -105,7 +106,7 @@ int main(int argc, char *argv[])
     }
 
     in = xmalloc(sizeof(Input), window);
-    memset(in, 0, sizeof(*in));
+    memset(in, 0, sizeof(Input));
 
     fonts = loadFonts(window);
     pictures = loadPictures(renderer, window);
@@ -126,7 +127,9 @@ int main(int argc, char *argv[])
     SDL_initFramerate(fps);
     SDL_setFramerate(fps, 30);
 
-    intro(renderer, in, pictures, fonts, sounds, fps);
+    playVideo(window, renderer, in, fonts, "data/videos/intro.mp4");
+
+    intro(window, renderer, in, pictures, fonts, sounds, fps);
 
     SDL_setFramerate(fps, 60);
 

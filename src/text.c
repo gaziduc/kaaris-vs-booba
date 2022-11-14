@@ -1,21 +1,23 @@
+#include <stdlib.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include "utils.h"
 #include "event.h"
 #include "data.h"
 #include "text.h"
 #include "game.h"
 
-void intro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, FPSmanager *fps)
+void intro(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, FPSmanager *fps)
 {
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "C'est sur le plateau verdoyant de la région des lagunes,$dans la petite bourgade de Cocody rattachée à Abidjan que$naquit Zongo le Dozo en 1980. Véritable force de la nature,$nourri au terroir tumultueux de cette région sauvage$pendant 3 années, il se voit forcé de quitter la terre$originelle des Hommes pour venir dans l'enfer de la banlieue$parisienne."))
+    if(!textIntro(window, renderer, in, pictures, fonts, sounds, fps, "C'est sur le plateau verdoyant de la région des lagunes,$dans la petite bourgade de Cocody rattachée à Abidjan que$naquit Zongo le Dozo en 1980. Véritable force de la nature,$nourri au terroir tumultueux de cette région sauvage$pendant 3 années, il se voit forcé de quitter la terre$originelle des Hommes pour venir dans l'enfer de la banlieue$parisienne."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Fort d'un baccalauréat STT, poursuivant des études$scientifiques à la factulté du val d'Oise, il apprend$l'anatomie pour parfaire en secret des techniques de$neutralisation léthales."))
+    if(!textIntro(window, renderer, in, pictures, fonts, sounds, fps, "Fort d'un baccalauréat STT, poursuivant des études$scientifiques à la factulté du val d'Oise, il apprend$l'anatomie pour parfaire en secret des techniques de$neutralisation léthales."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Gladiateur des temps modernes, montagne de testostérone,$il n'a fallu que quelques années pour forger la réputation$de cet être surhumain qui a gagné à la loterie génétique.$Zongo presse le pas, et commence à s'interroger sur son$avenir : s'il ne pouvait pas gravir les échelons de la$vieille Europe en plein émoi, il allait s'autoproclamer Roi,$et revétir un nouveau blason qui enverrait un message fort de$puissance. Il optera ainsi pour le pseudonyme \"Kaaris\" qui$signifie \"Roi des hommes\" en Ivoirien."))
+    if(!textIntro(window, renderer, in, pictures, fonts, sounds, fps, "Gladiateur des temps modernes, montagne de testostérone,$il n'a fallu que quelques années pour forger la réputation$de cet être surhumain qui a gagné à la loterie génétique.$Zongo presse le pas, et commence à s'interroger sur son$avenir : s'il ne pouvait pas gravir les échelons de la$vieille Europe en plein émoi, il allait s'autoproclamer Roi,$et revétir un nouveau blason qui enverrait un message fort de$puissance. Il optera ainsi pour le pseudonyme \"Kaaris\" qui$signifie \"Roi des hommes\" en Ivoirien."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Invaincu en 78 combats menés clandestinement pour lesquels$il ne laisse aucune trace numérique par fierté, il décide à$contrecoeur d'accepter la proposition d'une exhibition$martiale d'un troubadour local. Et c'est en Décembre qu'il$révèlera au monde sa vraie nature, à coup de salades de$phalanges savamment placées par un tour de bras de 98 cm.$Personne en ce monde n'est prêt pour tel spectacle."))
+    if(!textIntro(window, renderer, in, pictures, fonts, sounds, fps, "Invaincu en 78 combats menés clandestinement pour lesquels$il ne laisse aucune trace numérique par fierté, il décide à$contrecoeur d'accepter la proposition d'une exhibition$martiale d'un troubadour local. Et c'est en Décembre qu'il$révèlera au monde sa vraie nature, à coup de salades de$phalanges savamment placées par un tour de bras de 98 cm.$Personne en ce monde n'est prêt pour tel spectacle."))
         return;
-    if(!textIntro(renderer, in, pictures, fonts, sounds, fps, "Zongo le Dozo va réaliser son rêve, et son ennemi n'aura$le choix que de goûter à la subtile nuance salée de son$propre sang parfumé par la rage de Cocody."))
+    if(!textIntro(window, renderer, in, pictures, fonts, sounds, fps, "Zongo le Dozo va réaliser son rêve, et son ennemi n'aura$le choix que de goûter à la subtile nuance salée de son$propre sang parfumé par la rage de Cocody."))
         return;
 }
 
@@ -23,7 +25,7 @@ void intro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, 
 
 
 
-int textIntro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, FPSmanager *fps, char *str)
+int textIntro(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *fonts, Sounds *sounds, FPSmanager *fps, char *str)
 {
     SDL_Color white = {255, 255, 255, 255};
     int escape = 0;
@@ -106,18 +108,21 @@ int textIntro(SDL_Renderer *renderer, Input *in, Pictures *pictures, Fonts *font
             temp_index++;
             temp_line_size++;
 
-            char line[line_size];
+            char *line = xmalloc(line_size, window);
             for(int i = 0; i < line_size; i++)
                 line[i] = str[offset + i];
             line[line_size - 1] = '\0';
 
-            char temp_line[temp_line_size];
+            char *temp_line = xmalloc(temp_line_size, window);
             for(int i = 0; i < temp_line_size; i++)
                 temp_line[i] = str[offset + i];
             temp_line[temp_line_size - 1] = '\0';
 
             SDL_Texture *texture = RenderTextBlended(renderer, fonts->preview_intro, line, white);
             SDL_Surface *temp_surface = TTF_RenderText_Blended(fonts->preview_intro, temp_line, white);
+
+            free(line);
+            free(temp_line);
 
             SDL_Rect pos_dst;
             SDL_QueryTexture(texture, NULL, NULL, &pos_dst.w, &pos_dst.h);

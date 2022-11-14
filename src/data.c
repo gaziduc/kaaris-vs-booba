@@ -97,7 +97,7 @@ Settings* loadSettings(SDL_Window *window)
 
     if(file == NULL)
     {
-        settings->fullscreen = 1;
+        settings->fullscreen = 0;
         settings->music_volume = 128;
         settings->sfx_volume = 128;
         settings->haptic = 1;

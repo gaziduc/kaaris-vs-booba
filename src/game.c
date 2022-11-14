@@ -66,11 +66,13 @@ void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lv
 
     for(int y = 0; y < lvl->height; y++)
     {
-        char line[lvl->width + 3];
+        char *line = xmalloc(lvl->width + 3 * sizeof(char), window);
         fgets(line, lvl->width + 3, file); // + 3 => for \r eventually, \n and \0
 
         for(int x = 0; x < lvl->width; x++)
             lvl->map[x][y] = line[x] - '0';
+
+        free(line);
     }
 
     fclose(file);
@@ -604,8 +606,8 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
     loadLevel(window, renderer, level_num, lvl, PLAY, num_player);
     unsigned long frame_num = 0;
     int escape = 0, finished = 0;
-    int lvl_finished[num_player];
-    int has_updated_scores[num_player];
+    int *lvl_finished = xmalloc(num_player * sizeof(int), window);
+    int* has_updated_scores = xmalloc(num_player * sizeof(int), window);
     for(int i = 0; i < num_player; i++)
     {
          lvl_finished[i] = 0;
@@ -613,7 +615,7 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
     }
 
 
-    Player *player[num_player];
+    Player **player = xmalloc(num_player * sizeof(Player *), window);
     for(int i = 0; i < num_player; i++)
     {
         player[i] = xmalloc(sizeof(Player), window);
@@ -941,6 +943,8 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
 
     for(int i = 0; i < num_player; i++)
         freePlayer(player[i]);
+
+    free(player);
 
     if(net != NULL)
         receive = 0;
