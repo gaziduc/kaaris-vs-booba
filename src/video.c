@@ -1,5 +1,7 @@
 #define __STDC_CONSTANT_MACROS
 
+#ifndef __EMSCRIPTEN__
+
 #include <stdint.h>
 #include <inttypes.h>
 #include <windows.h>
@@ -272,46 +274,46 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
 	avformat_network_init();
 
 	rv = avformat_open_input(&ictx, filename, NULL, NULL);
-	if(rv)
+	if (rv)
         goto cleanup;
 
 	rv = avformat_find_stream_info(ictx, NULL);
-	if(rv)
+	if (rv)
         goto cleanup;
 
 	int audioStream = -1, videoStream = -1;
 
-	for(unsigned int s = 0; s < ictx->nb_streams; ++s)
+	for (unsigned int s = 0; s < ictx->nb_streams; ++s)
 	{
 		av_dump_format(ictx, s, filename, FALSE);
-		if(ictx->streams[s]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audioStream < 0)
+		if (ictx->streams[s]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO && audioStream < 0)
 			audioStream = s;
-		else if(ictx->streams[s]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStream < 0)
+		else if (ictx->streams[s]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && videoStream < 0)
 			videoStream = s;
 	}
 
-	if(audioStream < 0 && videoStream < 0)
+	if (audioStream < 0 && videoStream < 0)
         goto cleanup;
 
 	AVCodec *audioCodec = NULL, *videoCodec = NULL;
 	AVCodecContext *audioCtx = NULL, *videoCtx = NULL;
 
-	if(audioStream >= 0)
+	if (audioStream >= 0)
 	{
 		audioCodec = avcodec_find_decoder(ictx->streams[audioStream]->codecpar->codec_id);
 		if (!audioCodec)
 			goto cleanup;
 		audioCtx = avcodec_alloc_context3(audioCodec);
-		if(!audioCtx)
+		if (!audioCtx)
             goto cleanup;
 		rv = avcodec_parameters_to_context(audioCtx, ictx->streams[audioStream]->codecpar);
-		if(rv)
+		if (rv)
             goto cleanup;
 		rv = avcodec_open2(audioCtx, audioCodec, NULL);
-		if(rv)
+		if (rv)
             goto cleanup;
 		swrCtx = swr_alloc();
-		if(!swrCtx)
+		if (!swrCtx)
             goto cleanup;
 
 		av_opt_set_channel_layout(swrCtx, "in_channel_layout", audioCtx->channel_layout, 0);
@@ -322,26 +324,26 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
 		av_opt_set_sample_fmt(swrCtx, "out_sample_fmt", AV_SAMPLE_FMT_FLT, 0);
 
 		rv = swr_init(swrCtx);
-		if(rv)
+		if (rv)
             goto cleanup;
 	}
 
-	if(videoStream >= 0)
+	if (videoStream >= 0)
 	{
 		videoCodec = avcodec_find_decoder(ictx->streams[videoStream]->codecpar->codec_id);
 		if (!videoCodec)
 			goto cleanup;
 		videoCtx = avcodec_alloc_context3(videoCodec);
-		if(!videoCtx)
+		if (!videoCtx)
             goto cleanup;
 		rv = avcodec_parameters_to_context(videoCtx, ictx->streams[videoStream]->codecpar);
-		if(rv)
+		if (rv)
             goto cleanup;
 		rv = avcodec_open2(videoCtx, videoCodec, NULL);
-		if(rv)
+		if (rv)
             goto cleanup;
 		swsCtx = sws_getContext(videoCtx->width, videoCtx->height, videoCtx->pix_fmt, videoCtx->width, videoCtx->height, AV_PIX_FMT_RGB24, SWS_BILINEAR, NULL, NULL, NULL);
-		if(!swsCtx)
+		if (!swsCtx)
             goto cleanup;
 	}
 
@@ -405,31 +407,31 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
 	AVPacket packet;
 	int iVideo = 0;
 
-	while(av_read_frame(ictx, &packet) >= 0)
+	while (av_read_frame(ictx, &packet) >= 0)
 	{
-		if(packet.stream_index == videoStream)
+		if (packet.stream_index == videoStream)
 		{
 			rv = avcodec_send_packet(videoCtx, &packet);
-			if(rv)
+			if (rv)
                 goto cleanup;
 
-			while(!avcodec_receive_frame(videoCtx, pFrame))
+			while (!avcodec_receive_frame(videoCtx, pFrame))
 			{
 				sws_scale(swsCtx, pFrame->data, pFrame->linesize, 0, videoCtx->height, pFrameRGB->data, pFrameRGB->linesize);
 				SDL_UpdateTexture(texture, NULL, pFrameRGB->data[0], pFrameRGB->linesize[0]);
 				SDL_RenderClear(renderer);
 				SDL_RenderCopy(renderer, texture, NULL, NULL);
 
-				if(alphaGoingUp)
+				if (alphaGoingUp)
 				{
 				    alpha += 5;
-				    if(alpha >= 255)
+				    if (alpha >= 255)
                         alphaGoingUp = 0;
 				}
 				else
                 {
                     alpha -= 5;
-				    if(alpha <= 0)
+				    if (alpha <= 0)
                         alphaGoingUp = 1;
                 }
 
@@ -450,9 +452,9 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
 
 		updateEvents(in);
 
-		if(in->quit)
+		if (in->quit)
             exit(EXIT_SUCCESS);
-        if(KEY_ESCAPE || KEY_ENTER_MENU)
+        if (KEY_ESCAPE || KEY_ENTER_MENU)
         {
             in->key[SDL_SCANCODE_SPACE] = 0;
             in->key[SDL_SCANCODE_RETURN] = 0;
@@ -468,30 +470,30 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
     cleanup:
 	WakeConditionVariable(&audioq.cv);
 	quit = 1;
-	if(rv)
+	if (rv)
 	{
 		av_strerror(rv, err, sizeof(err));
 		SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Error", SDL_GetError(), window);
 	}
-	if(frameBuffer)
+	if (frameBuffer)
 		av_free(frameBuffer);
-	if(pFrame)
+	if (pFrame)
 		av_frame_free(&pFrame);
-	if(pFrameRGB)
+	if (pFrameRGB)
 		av_frame_free(&pFrameRGB);
-	if(videoCtx)
+	if (videoCtx)
 		avcodec_close(videoCtx);
-	if(audioCtx)
+	if (audioCtx)
 		avcodec_close(audioCtx);
-	if(swsCtx)
+	if (swsCtx)
 		sws_freeContext(swsCtx);
-	if(swrCtx)
+	if (swrCtx)
 		swr_free(&swrCtx);
-	if(texture)
+	if (texture)
 		SDL_DestroyTexture(texture);
-	if(ictx)
+	if (ictx)
 		avformat_close_input(&ictx);
-	if(octx)
+	if (octx)
 		avformat_free_context(octx);
 
 	avformat_network_deinit();
@@ -501,3 +503,5 @@ int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *font
 
 	return rv;
 }
+
+#endif // !__EMSCRIPTEN__

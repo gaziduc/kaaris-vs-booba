@@ -29,25 +29,32 @@ if (MSVC)
     endforeach ()
 endif ()
 
-
 # Warning: put this before find_package as they use DEPS_DIR on Windows
 set(DEPS_DIR ${PROJECT_SOURCE_DIR}/dep/win64-msvc)
 
-# dependencies headers
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+if (${CMAKE_SYSTEM_NAME} MATCHES "Emscripten")
+    set(USE_FLAGS "-O3 -s USE_SDL=2 -s USE_SDL_IMAGE=2 -s SDL2_IMAGE_FORMATS='[\"png\"]' -s USE_SDL_MIXER=2 -s SDL2_MIXER_FORMATS='[\"mp3\"]' -s USE_SDL_TTF=2 -s USE_SDL_GFX=2 -s USE_SDL_NET=2 -s ALLOW_MEMORY_GROWTH=1 -s ASYNCIFY --preload-file data -s WASM=1 --shell-file template.html --post-js postfix.js")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${USE_FLAGS}")
+    set(CMAKE_EXECUTABLE_SUFFIX .html)
+else ()
+    # dependencies headers
+    set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 
-find_package(SDL2 REQUIRED)
-find_package(SDL2_IMAGE REQUIRED)
-find_package(SDL2_TTF REQUIRED)
-find_package(SDL2_MIXER REQUIRED)
-find_package(SDL2_GFX REQUIRED)
-find_package(SDL2_NET REQUIRED)
-find_package(FFmpeg REQUIRED)
+    find_package(SDL2 REQUIRED)
+    find_package(SDL2_IMAGE REQUIRED)
+    find_package(SDL2_TTF REQUIRED)
+    find_package(SDL2_MIXER REQUIRED)
+    find_package(SDL2_GFX REQUIRED)
+    find_package(SDL2_NET REQUIRED)
+    find_package(FFmpeg REQUIRED)
 
-include_directories(SRC ${SDL2_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${SDL2_IMAGE_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${SDL2_GFX_INCLUDE_DIR} ${SDL2_NET_INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
+    include_directories(SRC ${SDL2_INCLUDE_DIR} ${SDL2_TTF_INCLUDE_DIR} ${SDL2_IMAGE_INCLUDE_DIR} ${SDL2_MIXER_INCLUDE_DIR} ${SDL2_GFX_INCLUDE_DIR} ${SDL2_NET_INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 
-# Warnings
-add_compile_options(/W3)
+    # Warnings
+    add_compile_options(/W3)
+endif ()
     
 
 # compiadd_executable(${PROJECT_NAME} WIN32 ${SRC} icon/res.rc)
@@ -59,7 +66,6 @@ target_include_directories(${PROJECT_NAME} PRIVATE "src")
 
 # dependencies libraries
 target_link_libraries(${PROJECT_NAME} ${SDL2MAIN_LIBRARY} ${SDL2_LIBRARY} ${SDL2_TTF_LIBRARY} ${SDL2_IMAGE_LIBRARY} ${SDL2_MIXER_LIBRARY} ${SDL2_GFX_LIBRARY} ${SDL2_NET_LIBRARY} ${FFMPEG_LIBRARIES})
-target_compile_definitions(${PROJECT_NAME} PUBLIC ${FFMPEG_DEFINITIONS})
 
 # Other
 set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS /SUBSYSTEM:WINDOWS)

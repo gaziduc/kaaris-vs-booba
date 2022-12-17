@@ -16,6 +16,7 @@
 #include "text.h"
 #include "version.h"
 #include "utils.h"
+#include "video.h"
 
 enum {TITLE, SOLO, MULTIPLAYER, ONLINE, OPTIONS, QUIT, INFO, VERSION, NUM_TEXT};
 
@@ -127,7 +128,9 @@ int main(int argc, char *argv[])
     SDL_initFramerate(fps);
     SDL_setFramerate(fps, 30);
 
-    playVideo(window, renderer, in, fonts, "data/videos/intro.mp4");
+    #ifndef __EMSCRIPTEN__
+        playVideo(window, renderer, in, fonts, "data/videos/intro.mp4");
+    #endif // !__EMSCRIPTEN__
 
     intro(window, renderer, in, pictures, fonts, sounds, fps);
 

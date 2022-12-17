@@ -290,9 +290,8 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
             pos_dst[1].x = WINDOW_W / 2 - pos_dst[1].w / 2 + 2;
 
 
-        if(status == CONNECTED)
+        if (status == CONNECTED)
         {
-            SDL_StopTextInput();
             Mix_PlayChannel(-1, sounds->enter, 0);
 
             transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0, fps);
@@ -300,7 +299,6 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
             transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1, fps);
 
             SDLNet_TCP_Close(connect->net->client);
-            SDL_StartTextInput();
 
             status = USER_FOCUS;
         }
