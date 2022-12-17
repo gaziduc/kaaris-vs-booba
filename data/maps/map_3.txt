@@ -1,5 +1,5 @@
 [METADATA]
-name=Trouver l'appartement de Booba pour aller lui niquer sa race
+name=Trouver_l'appartement_de_Booba_pour_aller_lui_niquer_sa_race
 width=200
 height=30
 sky=data/gfx/boulogne.jpg

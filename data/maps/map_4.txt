@@ -1,5 +1,5 @@
 [METADATA]
-name=Niquer Booba
+name=Niquer_Booba
 width=40
 height=28
 sky=data/gfx/appart.jpg

@@ -1,5 +1,5 @@
 [METADATA]
-name=Prendre le Nautilus pour aller chercher Booba
+name=Prendre_le_Nautilus_pour_aller_chercher_Booba
 width=100
 height=40
 sky=data/gfx/water.png

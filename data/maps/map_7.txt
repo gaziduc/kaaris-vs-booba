@@ -1,5 +1,5 @@
 [METADATA]
-name=Niquer Booba en enfer
+name=Niquer_Booba_en_enfer
 width=40
 height=28
 sky=data/gfx/appart2.jpg

@@ -23,10 +23,10 @@ int receive;
 void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players)
 {
     char str[200] = "";
-    FILE *file = NULL;
+    SDL_RWops *file = NULL;
 
     sprintf(str, "data/maps/map_%d.txt", lvl_num);
-    file = fopen(str, "r");
+    file = SDL_RWFromFile(str, "r");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
@@ -34,19 +34,15 @@ void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lv
 
     lvl->weather = xmalloc(sizeof(Weather), window);
 
-    fscanf(file, "[METADATA]\nname=");
-    memset(lvl->name, '\0', sizeof(lvl->name));
-    fgets(lvl->name, sizeof(lvl->name) / sizeof(lvl->name[0]), file);
+    char buf[20000] = { 0 };
+    SDL_RWread(file, buf, 1, 20000);
+    sscanf(buf, "[METADATA]\r\nname=%s\r\nwidth=%d\r\nheight=%d\r\nsky=%s\r\ntileset=%s\r\ncollision=%s\r\nmusic=%s\r\nweather=%s\r\nweather_num_elm=%d\r\nweather_dir_x=[%d,%d]\r\nweather_dir_y=[%d,%d]\r\nin_water=%d\r\n\r\n[LEVEL]\r\n", lvl->name, &lvl->width, &lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, &lvl->weather->num_elm, &lvl->weather->dirXmin, &lvl->weather->dirXmax, &lvl->weather->dirYmin, &lvl->weather->dirYmax, &lvl->in_water);
 
-    char *end = strchr(lvl->name, '\r');
-    if(end != NULL)
-        *end = '\0';
-
-    end = strchr(lvl->name, '\n');
-    if(end != NULL)
-        *end = '\0';
-
-    fscanf(file, "width=%d\nheight=%d\nsky=%s\ntileset=%s\ncollision=%s\nmusic=%s\nweather=%s\nweather_num_elm=%d\nweather_dir_x=[%d,%d]\nweather_dir_y=[%d,%d]\nin_water=%d\n\n[LEVEL]\n", &lvl->width, &lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, &lvl->weather->num_elm, &lvl->weather->dirXmin, &lvl->weather->dirXmax, &lvl->weather->dirYmin, &lvl->weather->dirYmax, &lvl->in_water);
+    for (int n = 0; lvl->name[n]; n++)
+    {
+        if (lvl->name[n] == '_')
+            lvl->name[n] = ' ';
+    }
 
     lvl->sky = IMG_LoadTexture(renderer, lvl->sky_filename);
     if(lvl->sky == NULL)
@@ -64,18 +60,15 @@ void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lv
     for(int x = 0; x < lvl->width; x++)
         lvl->map[x] = xmalloc(sizeof(int) * lvl->height, window);
 
+    char* index = strstr(buf, "[LEVEL]\r\n");
+
     for(int y = 0; y < lvl->height; y++)
     {
-        char *line = xmalloc(lvl->width + 3 * sizeof(char), window);
-        fgets(line, lvl->width + 3, file); // + 3 => for \r eventually, \n and \0
-
-        for(int x = 0; x < lvl->width; x++)
-            lvl->map[x][y] = line[x] - '0';
-
-        free(line);
+        for (int x = 0; x < lvl->width; x++)
+            lvl->map[x][y] = index[x + y * (lvl->width + 2) + 9] - '0';
     }
 
-    fclose(file);
+    SDL_RWclose(file);
 
     for(int i = 0; i < 2; i++)
     {
@@ -87,20 +80,21 @@ void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lv
     lvl->maxY = lvl->height * TILE_SIZE;
 
 
-    file = fopen(lvl->solid_filename, "r");
+    file = SDL_RWFromFile(lvl->solid_filename, "r");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fscanf(file, "num_tiles=%d\n", &lvl->num_tiles);
+    char buffer[1025] = { 0 };
+    SDL_RWread(file, buffer, 1, 1024);
+    sscanf(buffer, "num_tiles=%d\r\n", &lvl->num_tiles);
+
     lvl->solid = xmalloc(sizeof(char) * lvl->num_tiles, window);
+    char* ind = strstr(buffer, "\r\n");
 
     for(int i = 0; i < lvl->num_tiles; i++)
-    {
-        fscanf(file, "%c", &lvl->solid[i]);
-        lvl->solid[i] -= '0';
-    }
+        lvl->solid[i] = ind[i + 2] - '0';
 
-    fclose(file);
+    SDL_RWclose(file);
 
     int num_elm_per_player = lvl->weather->num_elm / num_players;
 
@@ -127,9 +121,11 @@ void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lv
         if (lvl->music)
             Mix_PlayMusic(lvl->music, -1);
 
-        for(int i = 0; i < num_players; i++)
-            for(int j = 0; j < num_elm_per_player; j++)
+        for (int i = 0; i < num_players; i++)
+        {
+            for (int j = 0; j < num_elm_per_player; j++)
                 setWeatherElement(lvl->weather, i, j, 0, num_players);
+        }
     }
 }
 

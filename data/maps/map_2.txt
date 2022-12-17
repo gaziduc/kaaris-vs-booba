@@ -1,5 +1,5 @@
 [METADATA]
-name=Prendre les transports en commun jusqu'à Boulogne-Billancourt
+name=Prendre_les_transports_en_commun_jusqu'à_Boulogne-Billancourt
 width=150
 height=40
 sky=data/gfx/station.jpg

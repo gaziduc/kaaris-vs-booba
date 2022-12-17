@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <time.h>
+#include <string.h>
 #include <stdlib.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_image.h>
@@ -42,7 +43,8 @@ int main(int argc, char *argv[])
     SDL_Rect pos_dst[NUM_TEXT];
     SDL_Rect pos_fs;
     SDL_Texture *texture[NUM_TEXT];
-    SDL_Color white = {255, 255, 255, 255};
+    SDL_Color white = { 255, 255, 255, 255 };
+    SDL_Color grey = { 128, 128, 128, 255 };
     int selected = SOLO;
     char str[256] = "";
     pos_fs.x = 0;
@@ -139,7 +141,12 @@ int main(int argc, char *argv[])
     texture[TITLE] = RenderTextBlended(renderer, fonts->preview_title, "Kaaris vs Booba", white);
     texture[SOLO] = RenderTextBlended(renderer, fonts->ocraext_message, "Solo", white);
     texture[MULTIPLAYER] = RenderTextBlended(renderer, fonts->ocraext_message, "Multi local", white);
+#ifndef __EMSCRIPTEN__
     texture[ONLINE] = RenderTextBlended(renderer, fonts->ocraext_message, "Multi en LAN", white);
+#else
+    texture[ONLINE] = RenderTextBlended(renderer, fonts->ocraext_message, "Multi en LAN", grey);
+#endif // !__EMSCRIPTEN__
+
     texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
@@ -222,8 +229,10 @@ int main(int argc, char *argv[])
                     selectMode(window, renderer, pictures, fonts, in, sounds, &music, settings, 1, NULL, fps);
                 else if(selected == MULTIPLAYER)
                     selectMultiCommandType(window, renderer, in, fonts, pictures, sounds, &music, settings, fps);
-                else if(selected == ONLINE)
+                #ifndef __EMSCRIPTEN__
+                else if (selected == ONLINE)
                     hostOrJoin(window, renderer, pictures, fonts, in, sounds, &music, settings, fps);
+                #endif // !__EMSCRIPTEN__
                 else if(selected == OPTIONS)
                     displayOptions(renderer, window, pictures, fonts, sounds, settings, in, fps);
 

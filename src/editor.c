@@ -155,26 +155,48 @@ void saveMap(Lvl *lvl)
 {
     char str[200] = "";
 
-    FILE *file = NULL;
+    SDL_RWops *file = NULL;
 
     sprintf(str, "data/maps/map_%d.txt", lvl->number);
-    file = fopen(str, "w");
+    file = SDL_RWFromFile(str, "w");
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    rewind(file);
+    char buf1[2049] = { 0 };
 
-    fprintf(file, "[METADATA]\nname=%s\nwidth=%d\nheight=%d\nsky=%s\ntileset=%s\ncollision=%s\nmusic=%s\nweather=%s\nweather_num_elm=%d\nweather_dir_x=[%d,%d]\nweather_dir_y=[%d,%d]\nin_water=%d\n\n[LEVEL]\n", lvl->name, lvl->width, lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, lvl->weather->num_elm, lvl->weather->dirXmin, lvl->weather->dirXmax, lvl->weather->dirYmin, lvl->weather->dirYmax, lvl->in_water);
-
-    for(int y = 0; y < lvl->height; y++)
+    for (int n = 0; lvl->name[n]; n++)
     {
-        for(int x = 0; x < lvl->width; x++)
-            fputc(lvl->map[x][y] + '0', file);
-
-        fputc('\n', file);
+        if (lvl->name[n] == ' ')
+            lvl->name[n] = '_';
     }
 
-    fclose(file);
+
+    sprintf(buf1, "[METADATA]\r\nname=%s\r\nwidth=%d\r\nheight=%d\r\nsky=%s\r\ntileset=%s\r\ncollision=%s\r\nmusic=%s\r\nweather=%s\r\nweather_num_elm=%d\r\nweather_dir_x=[%d,%d]\r\nweather_dir_y=[%d,%d]\r\nin_water=%d\r\n\r\n[LEVEL]\r\n", lvl->name, lvl->width, lvl->height, lvl->sky_filename, lvl->tileset_filename, lvl->solid_filename, lvl->music_filename, lvl->weather_filename, lvl->weather->num_elm, lvl->weather->dirXmin, lvl->weather->dirXmax, lvl->weather->dirYmin, lvl->weather->dirYmax, lvl->in_water);
+    SDL_RWwrite(file, buf1, 1, strlen(buf1));
+
+    char buf2[16384] = { 0 };
+    size_t i = 0;
+
+    for (int y = 0; y < lvl->height; y++)
+    {
+        for (int x = 0; x < lvl->width; x++)
+        {
+            buf2[i] = lvl->map[x][y] + '0';
+            i++;
+        }
+           
+        buf2[i] = '\r';
+        i++;
+
+        buf2[i] = '\n';
+        i++;
+    }
+
+    i++;
+
+    SDL_RWwrite(file, buf2, 1, i);
+
+    SDL_RWclose(file);
 }
 
 

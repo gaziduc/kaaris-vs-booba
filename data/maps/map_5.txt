@@ -1,5 +1,5 @@
 [METADATA]
-name=Aller chercher Booba en enfer pour lui niquer sa race
+name=Aller_chercher_Booba_en_enfer_pour_lui_niquer_sa_race
 width=150
 height=45
 sky=data/gfx/hell.jpg

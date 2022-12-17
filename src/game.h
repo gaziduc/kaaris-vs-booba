@@ -99,7 +99,7 @@
         SDL_Texture *tileset;
         char music_filename[100];
         Mix_Music *music;
-        int **map;
+        char **map;
         int startX[2];
         int startY[2];
         int maxX, maxY;

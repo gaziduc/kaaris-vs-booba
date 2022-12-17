@@ -132,7 +132,7 @@ int DecodeAudioFrame(AVCodecContext *ctx, uint8_t *audioBuf, int bufSize)
 	static uint8_t converted_data[(192000 * 3) / 2];
 	static uint8_t * converted;
 
-	int len1, len2, dataSize = 0;
+	int len2, dataSize = 0;
 
 	if (!frame)
 	{

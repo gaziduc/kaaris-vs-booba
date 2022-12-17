@@ -93,7 +93,7 @@ Settings* loadSettings(SDL_Window *window)
 {
     Settings *settings = xmalloc(sizeof(Settings), window);
 
-    FILE *file = fopen("settings.ini", "r");
+    SDL_RWops *file = SDL_RWFromFile("settings.ini", "r");
 
     if(file == NULL)
     {
@@ -101,24 +101,16 @@ Settings* loadSettings(SDL_Window *window)
         settings->music_volume = 128;
         settings->sfx_volume = 128;
         settings->haptic = 1;
-        sprintf(settings->nickname, "Player %d", rand() % 90000 + 10000);
+        sprintf(settings->nickname, "Player%d", rand() % 90000 + 10000);
 
         saveSettings(settings);
     }
     else
     {
-        fscanf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume, &settings->haptic);
-        fgets(settings->nickname, sizeof(settings->nickname) / sizeof(settings->nickname[0]), file);
-
-        char *end = strchr(settings->nickname, '\r');
-        if(end != NULL)
-            *end = '\0';
-
-        end = strchr(settings->nickname, '\n');
-        if(end != NULL)
-            *end = '\0';
-
-        fclose(file);
+        char buffer[1025] = { 0 };
+        SDL_RWread(file, buffer, 1, 1024);
+        sscanf(buffer, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=%s\n", &settings->fullscreen, &settings->music_volume, &settings->sfx_volume, &settings->haptic, settings->nickname);
+        SDL_RWclose(file);
     }
 
     settings->controls = loadControls(window);
@@ -130,13 +122,15 @@ Settings* loadSettings(SDL_Window *window)
 
 void saveSettings(Settings *settings)
 {
-    FILE *file = fopen("settings.ini", "w");
+    SDL_RWops *file = SDL_RWFromFile("settings.ini", "w");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=%s\n", settings->fullscreen, settings->music_volume, settings->sfx_volume, settings->haptic, settings->nickname);
-    fclose(file);
+    char buffer[1025] = { 0 };
+    sprintf(buffer, "Fullscreen=%d\nMusic Volume=%d\nSFX Volume=%d\nHaptic=%d\nNickname=%s\n", settings->fullscreen, settings->music_volume, settings->sfx_volume, settings->haptic, settings->nickname);
+    SDL_RWwrite(file, buffer, 1, strlen(buffer));
+    SDL_RWclose(file);
 }
 
 
@@ -146,7 +140,7 @@ void saveSettings(Settings *settings)
 
 void loadScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("scores.bin", "rb");
+    SDL_RWops *file = SDL_RWFromFile("scores.bin", "rb");
 
     if(file == NULL)
     {
@@ -160,11 +154,11 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
     {
         for(int i = 0; i < NUM_SCORES; i++)
         {
-            fread(&scores[i], sizeof(scores[i]), 1, file);
-            fread(names[i], sizeof(names[i]), 1, file);
+            SDL_RWread(file, &scores[i], sizeof(scores[i]), 1);
+            SDL_RWread(file, names[i], sizeof(names[i]), 1);
         }
 
-        fclose(file);
+        SDL_RWclose(file);
     }
 }
 
@@ -173,25 +167,25 @@ void loadScores(unsigned long scores[], char names[][NAME_LEN])
 
 void saveScores(unsigned long scores[], char names[][NAME_LEN])
 {
-    FILE *file = fopen("scores.bin", "wb");
+    SDL_RWops *file = SDL_RWFromFile("scores.bin", "wb");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
 
     for(int i = 0; i < NUM_SCORES; i++)
     {
-        fwrite(&scores[i], sizeof(scores[i]), 1, file);
-        fwrite(names[i], sizeof(names[i]), 1, file);
+        SDL_RWwrite(file, &scores[i], sizeof(scores[i]), 1);
+        SDL_RWwrite(file, names[i], sizeof(names[i]), 1);
     }
 
 
-    fclose(file);
+    SDL_RWclose(file);
 }
 
 
 void loadTimes(unsigned long times[])
 {
-    FILE *file = fopen("times.bin", "rb");
+    SDL_RWops *file = SDL_RWFromFile("times.bin", "rb");
 
     if(file == NULL)
     {
@@ -201,23 +195,23 @@ void loadTimes(unsigned long times[])
     else
     {
         for(int i = 0; i < NUM_TIMES; i++)
-            fread(&times[i], sizeof(times[i]), 1, file);
+            SDL_RWread(file, &times[i], sizeof(times[i]), 1);
 
-        fclose(file);
+        SDL_RWclose(file);
     }
 }
 
 void saveTimes(unsigned long times[])
 {
-    FILE *file = fopen("times.bin", "wb");
+    SDL_RWops *file = SDL_RWFromFile("times.bin", "wb");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
 
     for(int i = 0; i < NUM_TIMES; i++)
-        fwrite(&times[i], sizeof(times[i]), 1, file);
+        SDL_RWwrite(file, &times[i], sizeof(times[i]), 1);
 
-    fclose(file);
+    SDL_RWclose(file);
 }
 
 
@@ -225,7 +219,7 @@ Controls* loadControls(SDL_Window *window)
 {
     Controls *controls = xmalloc(sizeof(Controls) * 2, window);
 
-    FILE *file = fopen("controls.ini", "r");
+    SDL_RWops *file = SDL_RWFromFile("controls.ini", "r");
 
     if(file == NULL)
     {
@@ -234,8 +228,10 @@ Controls* loadControls(SDL_Window *window)
     }
     else
     {
-        fscanf(file, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[0].power_up, &controls[1].left, &controls[1].right, &controls[1].jump, &controls[1].power_up);
-        fclose(file);
+        char buffer[1025] = { 0 };
+        SDL_RWread(file, buffer, 1, 1024);
+        sscanf(buffer, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", &controls[0].left, &controls[0].right, &controls[0].jump, &controls[0].power_up, &controls[1].left, &controls[1].right, &controls[1].jump, &controls[1].power_up);
+        SDL_RWclose(file);
     }
 
     return controls;
@@ -259,13 +255,15 @@ void getDefaultControls(Controls *controls)
 
 void saveControls(Controls *controls)
 {
-    FILE *file = fopen("controls.ini", "w");
+    SDL_RWops *file = SDL_RWFromFile("controls.ini", "w");
 
     if(file == NULL)
         exit(EXIT_FAILURE);
 
-    fprintf(file, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", controls[0].left, controls[0].right, controls[0].jump, controls[0].power_up, controls[1].left, controls[1].right, controls[1].jump, controls[1].power_up);
-    fclose(file);
+    char buffer[1025] = { 0 };
+    sprintf(buffer, "[PLAYER 1]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n\n[PLAYER 2]\nLeft=%d\nRight=%d\nJump=%d\nPower up=%d\n", controls[0].left, controls[0].right, controls[0].jump, controls[0].power_up, controls[1].left, controls[1].right, controls[1].jump, controls[1].power_up);
+    SDL_RWwrite(file, buffer, 1, strlen(buffer));
+    SDL_RWclose(file);
 }
 
 
@@ -390,6 +388,12 @@ void enterName(SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *
                 str[i - 1] = '\0';
         }
 
+
+        int j = 0;
+        while (in->text[j] && in->text[j] != ' ')
+            j++;
+
+        in->text[j] = '\0';
 
         strncat(str, in->text, len - strlen(str) - 1);
 
