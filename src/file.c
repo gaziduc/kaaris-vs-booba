@@ -57,14 +57,17 @@ void selectMode(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, 
     {
         updateEvents(in);
 
+        if(net != NULL && !netIsConnected(net))
+            escape = 1; // l'autre joueur est parti
+
         if(in->quit)
         {
             if(net != NULL)
             {
+                netPacketInit(&packet, settings->nickname);
                 packet.quit = 1;
                 packet.choosing = 1;
-                strcpy(packet.nickname, settings->nickname);
-                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+                netSend(net, &packet);
             }
 
             exit(EXIT_SUCCESS);
@@ -136,16 +139,11 @@ void selectMode(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, 
                 if(net != NULL)
                 {
                     Packet packet;
-                    packet.accept = -1;
+                    netPacketInit(&packet, settings->nickname);
                     packet.lvl_num = 0;
                     packet.choosing = 1;
-                    packet.quit = 0;
-                    packet.frame = 0;
-                    packet.point.x = SPAWN_X;
-                    packet.point.y = SPAWN_Y;
-                    packet.state = IDLE_RIGHT;
-                    strcpy(packet.nickname, settings->nickname);
-                    SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+                    netSend(net, &packet);
+                    netResetGame(net);
                 }
 
 
@@ -164,11 +162,10 @@ void selectMode(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, 
 
         if(net != NULL)
         {
-            packet.accept = -1;
+            netPacketInit(&packet, settings->nickname);
             packet.choosing = escape;
             packet.quit = escape;
-            strcpy(packet.nickname, settings->nickname);
-            SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+            netSend(net, &packet);
         }
 
 

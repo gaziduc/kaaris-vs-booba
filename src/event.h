@@ -45,8 +45,8 @@
     } Input;
 
     void updateEvents(Input* in);
-    void initController(Input *in, int index);
-    void freeController(Input *in, int index);
+    void initController(Input *in, int num_controller);
+    void freeController(Input *in, int num_controller);
     int getKey();
 
 #endif // EVENT_H

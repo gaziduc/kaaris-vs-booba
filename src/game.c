@@ -14,10 +14,8 @@
 #include "list.h"
 #include "file.h"
 #include "utils.h"
+#include "fx.h"
 
-
-Packet other_packet;
-int receive;
 
 
 void loadLevel(SDL_Window *window, SDL_Renderer *renderer, const int lvl_num, Lvl *lvl, int mode, int num_players)
@@ -417,14 +415,17 @@ void map(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictur
     {
         updateEvents(in);
 
+        if(net != NULL && !netIsConnected(net))
+            escape = 1; // l'autre joueur est parti
+
         if(in->quit)
         {
             if(net != NULL)
             {
+                netPacketInit(&packet, settings->nickname);
                 packet.quit = 1;
                 packet.choosing = 1;
-                strcpy(packet.nickname, settings->nickname);
-                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+                netSend(net, &packet);
             }
 
             exit(EXIT_SUCCESS);
@@ -479,15 +480,11 @@ void map(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictur
 
             if(net != NULL)
             {
+                netPacketInit(&packet, settings->nickname);
                 packet.lvl_num = selected;
-                packet.quit = 0;
                 packet.choosing = 1;
-                packet.frame = 0;
-                packet.point.x = SPAWN_X;
-                packet.point.y = SPAWN_Y;
-                packet.state = IDLE_RIGHT;
-                strcpy(packet.nickname, settings->nickname);
-                SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+                netSend(net, &packet);
+                netResetGame(net);
             }
 
             Mix_PlayChannel(-1, sounds->enter, 0);
@@ -557,10 +554,8 @@ void map(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *pictur
 
         if(net != NULL)
         {
-            packet.quit = 0;
-            packet.choosing = 0;
-            strcpy(packet.nickname, settings->nickname);
-            SDLNet_TCP_Send(net->client, &packet, sizeof(Packet));
+            netPacketInit(&packet, settings->nickname);
+            netSend(net, &packet);
         }
 
         SDL_RenderClear(renderer);
@@ -619,13 +614,17 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
         player[i]->timer = 0;
     }
 
+    fxInit(renderer);
+
+    Packet other_packet;
+    int has_other = 0;
+    memset(&other_packet, 0, sizeof(other_packet));
+
+    if(net != NULL)
+        netResetGame(net); // jette les paquets perimes (ex : quit=1 de la partie precedente)
+
     if(net == NULL)
         displayLevelName(renderer, pictures, fonts, lvl, in, fps);
-    else
-    {
-        receive = 1;
-        SDL_CreateThread(receive_thread, "receive_thread", net);
-    }
 
 
     while(!escape)
@@ -645,17 +644,9 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
 
             SDL_Texture *texture = getScreenTexture(renderer);
 
-            if(net != NULL)
-                receive = 0;
-
+            // le thread de lecture reseau continue a tourner pendant la pause : pas de paquets perdus ni de socket sature
             if(pauseGame(renderer, texture, pictures, fonts, in, sounds, fps) == 2)
                 escape = 1;
-
-            if(net != NULL && !escape)
-            {
-                receive = 1;
-                SDL_CreateThread(receive_thread, "receive_thread", net);
-            }
 
             SDL_DestroyTexture(texture);
         }
@@ -830,11 +821,18 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
                 }
         }
 
+        for(int i = 0; i < num_player; i++)
+            fxPlayerEvents(i, player[i]);
+        fxUpdate();
+
         SDL_RenderClear(renderer); // put this line after mapCollisionPlayer(...), because of the animation of the end of a level.
+        for(int i = 0; i < num_player; i++)
+            centerScrollingOnPlayer(lvl, player[i], i, num_player);
+
+        fxShakeBegin(lvl, num_player); // apres le centrage : le tremblement ne decale pas le scrolling reel
 
         for(int i = 0; i < num_player; i++)
         {
-            centerScrollingOnPlayer(lvl, player[i], i, num_player);
             displaySky(renderer, num_player, i, lvl);
             displayWeather(renderer, lvl->weather, i, num_player);
             displayGame(renderer, pictures, lvl, player[i], i, frame_num, PLAY, num_player);
@@ -848,9 +846,16 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
         for(int i = 0; i < num_player; i++)
             displayPlayer(renderer, lvl, player[i], i, num_player, pictures, net, fonts);
 
+        for(int i = 0; i < num_player; i++)
+            fxDraw(renderer, lvl->startX[i], lvl->startY[i], (int) (WINDOW_H / num_player) * i, (int) (WINDOW_H / num_player));
+
+        fxShakeEnd(lvl, num_player);
+        fxVignette(renderer);
+
         if(net != NULL)
         {
             Packet packet;
+            netPacketInit(&packet, settings->nickname);
             packet.point.x = player[0]->pos.x;
             packet.point.y = player[0]->pos.y;
             packet.state = player[0]->state;
@@ -858,13 +863,15 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
             packet.quit = escape;
             packet.lvl_num = level_num;
             packet.choosing = 0;
-            strcpy(packet.nickname, settings->nickname);
-            sendPos(net, &packet);
+            netSend(net, &packet);
 
-            if(other_packet.quit)
+            has_other = netPollPosition(net, &other_packet);
+
+            if(!netIsConnected(net) || (has_other && other_packet.quit))
                 escape = 1;
 
-            displayOtherPlayer(renderer, lvl, player[0], other_packet, fonts);
+            if(has_other)
+                displayOtherPlayer(renderer, lvl, player[0], other_packet, fonts);
         }
 
         // Affichage de la barre qui sépare les deux semi-écrans
@@ -920,7 +927,6 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
         {
             if(num_player < 2 && player[i]->lifes <= 0 && !player[i]->dead)
             {
-                receive = 0;
                 gameOver(renderer, fonts, in, fps);
                 escape = 1;
             }
@@ -942,8 +948,7 @@ void playGame(SDL_Window *window, SDL_Renderer *renderer, Input *in, Pictures *p
 
     free(player);
 
-    if(net != NULL)
-        receive = 0;
+    fxQuit();
 }
 
 
@@ -1436,7 +1441,21 @@ void displayPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, int player_
                         SDL_SetTextureAlphaMod(player->texture[player->state], 192);
                     }
 
-                    SDL_RenderCopy(renderer, player->texture[player->state], &pos_src, &pos_dst);
+                    SDL_Rect pos_draw = pos_dst;
+
+                    if(offsetX == 0 && offsetY == 0)
+                    {
+                        // ombre au sol + squash & stretch (cartoon), ancres aux pieds
+                        float sx, sy;
+                        fxShadow(renderer, lvl, player, i, num_player);
+                        fxPlayerScale(player_num, &sx, &sy);
+                        pos_draw.w = (int) (PLAYER_W * sx);
+                        pos_draw.h = (int) (PLAYER_H * sy);
+                        pos_draw.x = pos_dst.x + (PLAYER_W - pos_draw.w) / 2;
+                        pos_draw.y = pos_dst.y + PLAYER_H - pos_draw.h;
+                    }
+
+                    SDL_RenderCopy(renderer, player->texture[player->state], &pos_src, &pos_draw);
 
                     if(player_num != i)
                         SDL_SetTextureAlphaMod(player->texture[player->state], 255);
@@ -1730,6 +1749,7 @@ int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, I
                 current->lifes--;
                 current->frame_explosion = 0;
                 Mix_PlayChannel(-1, sounds->explosion, 0);
+                fxBurst(current->pos.x + current->pos.w / 2, current->pos.y + current->pos.h / 2, 18, 255, 150, 40);
             }
 
             for(int i = 0; i < num_player; i++)
@@ -1757,6 +1777,8 @@ int updateMonsters(Lvl *lvl, Player *player[], int num_player, Sounds *sounds, I
                         current->lifes--;
                         current->frame_explosion = 0;
                         Mix_PlayChannel(-1, sounds->explosion, 0);
+                        fxBurst(current->pos.x + current->pos.w / 2, current->pos.y + current->pos.h / 2, 24, 255, 150, 40);
+                        fxShake(4);
                     }
                     else if(collision == 2)
                         death(player[i], i, sounds, in, settings);
@@ -3159,6 +3181,8 @@ void updateBullets(BulletList *bulletList, MonsterList *monsterList, Sounds *sou
                 curMonster->lifes--;
                 curMonster->frame_explosion = 0;
                 Mix_PlayChannel(-1, sounds->explosion, 0);
+                fxBurst(curBullet->pos.x, curBullet->pos.y, 22, 255, 140, 30);
+                fxShake(3);
                 players[curBullet->player_num]->killed++;
 
                 curBullet = curBullet->next;
@@ -3225,18 +3249,6 @@ void displayBullets(SDL_Renderer *renderer, Lvl *lvl, int player_num, int num_pl
 
         curBullet = curBullet->next;
     }
-}
-
-
-int receive_thread(void *data)
-{
-    while(receive)
-    {
-        receivePos((Net*) data, &other_packet);
-        SDL_Delay(1);
-    }
-
-    return 0;
 }
 
 

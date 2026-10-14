@@ -12,12 +12,341 @@
 #include "file.h"
 #include "utils.h"
 
-char level_num;
-char quit;
-char nickname[NICKNAME_LEN];
+/* Etat de la tentative de connexion en cours (partage avec connectingThread) */
+static SDL_mutex *connect_mutex = NULL;
+static int connect_attempt = 0;     /* identifiant de la tentative courante */
+static TCPsocket connect_socket = NULL;
+static IPaddress connect_ip;
 int status;
 char error[256];
-char accept_con;
+
+
+/* ------------------------------------------------------------------------- */
+/*  Couche reseau                                                            */
+/* ------------------------------------------------------------------------- */
+
+static void putInt32(Uint8 *p, Sint32 v)
+{
+    Uint32 u = (Uint32) v;
+    p[0] = (Uint8) (u >> 24);
+    p[1] = (Uint8) (u >> 16);
+    p[2] = (Uint8) (u >> 8);
+    p[3] = (Uint8) u;
+}
+
+static Sint32 getInt32(const Uint8 *p)
+{
+    return (Sint32) (((Uint32) p[0] << 24) | ((Uint32) p[1] << 16) | ((Uint32) p[2] << 8) | (Uint32) p[3]);
+}
+
+/* Format fil : magic, protocole, flags, accept, lvl_num, x, y, state, frame, pseudo */
+void netEncode(const Packet *packet, Uint8 *buf)
+{
+    memset(buf, 0, NET_PACKET_SIZE);
+
+    buf[0] = NET_MAGIC;
+    buf[1] = NET_PROTOCOL;
+    buf[2] = (Uint8) ((packet->quit ? 1 : 0) | (packet->choosing ? 2 : 0));
+    buf[3] = (Uint8) (Sint8) packet->accept;
+    buf[4] = (Uint8) (Sint8) packet->lvl_num;
+    putInt32(buf + 5, packet->point.x);
+    putInt32(buf + 9, packet->point.y);
+    buf[13] = (Uint8) packet->state;
+    buf[14] = (Uint8) (packet->frame >> 8);
+    buf[15] = (Uint8) packet->frame;
+    memcpy(buf + 16, packet->nickname, NICKNAME_LEN - 1);
+    buf[16 + NICKNAME_LEN - 1] = '\0';
+}
+
+int netDecode(const Uint8 *buf, Packet *packet)
+{
+    if(buf[0] != NET_MAGIC || buf[1] != NET_PROTOCOL)
+        return 0;
+
+    memset(packet, 0, sizeof(Packet));
+    packet->quit = (buf[2] & 1) ? 1 : 0;
+    packet->choosing = (buf[2] & 2) ? 1 : 0;
+    packet->accept = (char) (Sint8) buf[3];
+    packet->lvl_num = (char) (Sint8) buf[4];
+    packet->point.x = getInt32(buf + 5);
+    packet->point.y = getInt32(buf + 9);
+    packet->state = buf[13];
+    packet->frame = (buf[14] << 8) | buf[15];
+    memcpy(packet->nickname, buf + 16, NICKNAME_LEN - 1);
+    packet->nickname[NICKNAME_LEN - 1] = '\0';
+
+    if(packet->state >= NUM_STATE)
+        packet->state = IDLE_RIGHT;
+
+    return 1;
+}
+
+void netPacketInit(Packet *packet, const char *nickname)
+{
+    memset(packet, 0, sizeof(Packet));
+    packet->accept = -1;
+    packet->lvl_num = -1;
+    packet->state = IDLE_RIGHT;
+    packet->point.x = SPAWN_X;
+    packet->point.y = SPAWN_Y;
+
+    if(nickname != NULL)
+    {
+        strncpy(packet->nickname, nickname, NICKNAME_LEN - 1);
+        packet->nickname[NICKNAME_LEN - 1] = '\0';
+    }
+}
+
+void netInit(Net *net)
+{
+    memset(net, 0, sizeof(Net));
+    net->pending_level = -1;
+    net->accept_state = -1;
+}
+
+static void netPublish(Net *net, const Packet *packet)
+{
+    SDL_LockMutex(net->mutex);
+
+    net->got_packet = 1;
+    strcpy(net->peer_nickname, packet->nickname);
+
+    if(packet->accept == 1)
+        net->accept_state = 1;
+    else if(packet->accept == 0 && net->accept_state != 1)
+        net->accept_state = 0;
+
+    if(packet->choosing)
+    {
+        if(packet->quit)
+            net->peer_quit = 1;
+        else
+            net->pending_level = packet->lvl_num;
+    }
+    else
+    {
+        net->latest = *packet;
+        net->has_latest = 1;
+    }
+
+    SDL_UnlockMutex(net->mutex);
+}
+
+static int netReaderThread(void *data)
+{
+    Net *net = (Net*) data;
+    Uint8 buf[NET_PACKET_SIZE];
+    int have = 0;
+
+    while(SDL_AtomicGet(&net->running))
+    {
+        int ready = SDLNet_CheckSockets(net->set, 50);
+
+        if(ready < 0)
+            break;
+        if(ready == 0 || !SDLNet_SocketReady(net->client))
+            continue;
+
+        int received = SDLNet_TCP_Recv(net->client, buf + have, NET_PACKET_SIZE - have);
+
+        if(received <= 0) // connexion fermee ou erreur
+            break;
+
+        have += received;
+
+        while(have == NET_PACKET_SIZE)
+        {
+            Packet packet;
+
+            if(netDecode(buf, &packet))
+            {
+                netPublish(net, &packet);
+                have = 0;
+            }
+            else
+            {
+                // flux desynchronise : on jette un octet et on recommence
+                memmove(buf, buf + 1, NET_PACKET_SIZE - 1);
+                have--;
+            }
+        }
+    }
+
+    SDL_AtomicSet(&net->connected, 0);
+
+    return 0;
+}
+
+int netStart(Net *net, TCPsocket client, int is_host)
+{
+    net->client = client;
+    net->is_host = is_host;
+    net->got_packet = 0;
+    net->has_latest = 0;
+    net->pending_level = -1;
+    net->peer_quit = 0;
+    net->accept_state = -1;
+    net->peer_nickname[0] = '\0';
+    net->mutex = SDL_CreateMutex();
+    net->set = SDLNet_AllocSocketSet(1);
+
+    if(net->mutex == NULL || net->set == NULL || SDLNet_TCP_AddSocket(net->set, client) < 0)
+    {
+        netStop(net);
+        return 0;
+    }
+
+    SDL_AtomicSet(&net->running, 1);
+    SDL_AtomicSet(&net->connected, 1);
+    net->reader = SDL_CreateThread(netReaderThread, "netReader", net);
+
+    if(net->reader == NULL)
+    {
+        netStop(net);
+        return 0;
+    }
+
+    return 1;
+}
+
+void netStop(Net *net)
+{
+    SDL_AtomicSet(&net->running, 0);
+
+    if(net->reader != NULL)
+    {
+        SDL_WaitThread(net->reader, NULL);
+        net->reader = NULL;
+    }
+
+    if(net->set != NULL)
+    {
+        if(net->client != NULL)
+            SDLNet_TCP_DelSocket(net->set, net->client);
+
+        SDLNet_FreeSocketSet(net->set);
+        net->set = NULL;
+    }
+
+    if(net->client != NULL)
+    {
+        SDLNet_TCP_Close(net->client);
+        net->client = NULL;
+    }
+
+    if(net->mutex != NULL)
+    {
+        SDL_DestroyMutex(net->mutex);
+        net->mutex = NULL;
+    }
+
+    SDL_AtomicSet(&net->connected, 0);
+}
+
+int netSend(Net *net, const Packet *packet)
+{
+    Uint8 buf[NET_PACKET_SIZE];
+
+    if(net == NULL || net->client == NULL || !SDL_AtomicGet(&net->connected))
+        return 0;
+
+    netEncode(packet, buf);
+
+    if(SDLNet_TCP_Send(net->client, buf, NET_PACKET_SIZE) < NET_PACKET_SIZE)
+    {
+        SDL_AtomicSet(&net->connected, 0);
+        return 0;
+    }
+
+    return 1;
+}
+
+int netIsConnected(Net *net)
+{
+    return net != NULL && SDL_AtomicGet(&net->connected);
+}
+
+int netPollPosition(Net *net, Packet *packet)
+{
+    int ok;
+
+    SDL_LockMutex(net->mutex);
+    ok = net->has_latest;
+    if(ok)
+        *packet = net->latest;
+    SDL_UnlockMutex(net->mutex);
+
+    return ok;
+}
+
+int netTakeLevel(Net *net)
+{
+    int level;
+
+    SDL_LockMutex(net->mutex);
+    level = net->pending_level;
+    net->pending_level = -1;
+    SDL_UnlockMutex(net->mutex);
+
+    return level;
+}
+
+int netPeerQuit(Net *net)
+{
+    int quit;
+
+    SDL_LockMutex(net->mutex);
+    quit = net->peer_quit;
+    SDL_UnlockMutex(net->mutex);
+
+    return quit;
+}
+
+int netAcceptState(Net *net)
+{
+    int state;
+
+    SDL_LockMutex(net->mutex);
+    state = net->accept_state;
+    SDL_UnlockMutex(net->mutex);
+
+    return state;
+}
+
+/* Attend le premier paquet de l'autre joueur (hello). Renvoie 0 en cas de timeout ou de deconnexion. */
+int netWaitHello(Net *net, Uint32 timeout_ms, char *nickname)
+{
+    Uint32 start = SDL_GetTicks();
+
+    while(SDL_GetTicks() - start < timeout_ms)
+    {
+        int got;
+
+        SDL_LockMutex(net->mutex);
+        got = net->got_packet;
+        if(got)
+            strcpy(nickname, net->peer_nickname);
+        SDL_UnlockMutex(net->mutex);
+
+        if(got)
+            return 1;
+        if(!SDL_AtomicGet(&net->connected))
+            return 0;
+
+        SDL_Delay(5);
+    }
+
+    return 0;
+}
+
+/* A appeler avant de lancer une partie : oublie les paquets d'une partie precedente (ex : quit=1 perime). */
+void netResetGame(Net *net)
+{
+    SDL_LockMutex(net->mutex);
+    net->has_latest = 0;
+    net->pending_level = -1;
+    SDL_UnlockMutex(net->mutex);
+}
 
 void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Mix_Music **music, Settings *settings, FPSmanager *fps)
 {
@@ -35,8 +364,9 @@ void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures
     pos_fs.h = WINDOW_H;
     IPaddress ip;
     IPaddress *local_ips;
-    SDLNet_ResolveHost(&ip, NULL, 3000);
+    SDLNet_ResolveHost(&ip, NULL, NET_PORT);
     Net *net = xmalloc(sizeof(Net), window);
+    netInit(net);
     net->server = SDLNet_TCP_Open(&ip);
 
     local_ips = xmalloc(sizeof(IPaddress) * MAX_IP_DISPLAYED, window);
@@ -55,7 +385,14 @@ void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures
         }
     }
 
-    texture[0] = RenderTextBlended(renderer, fonts->ocraext_score, "En attente d'un joueur", white);
+    if(net->server != NULL)
+        texture[0] = RenderTextBlended(renderer, fonts->ocraext_score, "En attente d'un joueur", white);
+    else
+    {
+        // port deja utilise (autre instance du jeu ?) : on l'affiche au lieu d'attendre indefiniment
+        SDL_Color red = {255, 80, 80, 255};
+        texture[0] = RenderTextBlended(renderer, fonts->ocraext_score, "Port 3000 indisponible", red);
+    }
     texture[1] = RenderTextBlended(renderer, fonts->ocraext_score, ".", white);
     texture[2] = RenderTextBlended(renderer, fonts->ocraext_message, "Adresse(s) IP locale(s) :", white);
 
@@ -73,41 +410,41 @@ void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures
 
     while(!escape)
     {
-        net->client = SDLNet_TCP_Accept(net->server);
-        if(net->client != NULL)
+        TCPsocket new_client = (net->server != NULL) ? SDLNet_TCP_Accept(net->server) : NULL;
+
+        if(new_client != NULL)
         {
-            IPaddress *ip = SDLNet_TCP_GetPeerAddress(net->client);
+            char peer_nickname[NICKNAME_LEN] = "";
+            IPaddress *peer_ip = SDLNet_TCP_GetPeerAddress(new_client);
+            IPaddress peer_ip_copy;
+            memset(&peer_ip_copy, 0, sizeof(peer_ip_copy));
+            if(peer_ip != NULL)
+                peer_ip_copy = *peer_ip;
 
-            Packet packet;
-            SDLNet_TCP_Recv(net->client, &packet, sizeof(Packet));
-
-            if(acceptClient(renderer, fonts, sounds, pictures, fps, in, ip, packet.nickname))
+            // le thread de lecture recupere le "hello" du joueur ; on n'attend plus indefiniment un client muet
+            if(netStart(net, new_client, 1) && netWaitHello(net, 3000, peer_nickname))
             {
                 Packet packet_to_send;
-                packet_to_send.accept = 1;
-                packet_to_send.choosing = 0;
-                packet_to_send.frame = 0;
-                packet_to_send.lvl_num = -1;
-                packet_to_send.nickname[0] = '\0';
-                packet_to_send.point.x = 0;
-                packet_to_send.point.y = 0;
-                packet_to_send.quit = 0;
-                packet_to_send.state = 0;
-                SDLNet_TCP_Send(net->client, &packet_to_send, sizeof(Packet));
+                netPacketInit(&packet_to_send, settings->nickname);
 
-                Mix_PlayChannel(-1, sounds->enter, 0);
-                selectMode(window, renderer, pictures, fonts, in, sounds, music, settings, 1, net, fps);
-            }
-            else
-            {
-                Packet packet_to_send;
-                packet_to_send.accept = 0;
-                packet_to_send.quit = 1;
-                SDLNet_TCP_Send(net->client, &packet_to_send, sizeof(Packet));
+                if(acceptClient(renderer, fonts, sounds, pictures, fps, in, &peer_ip_copy, peer_nickname) && netIsConnected(net))
+                {
+                    packet_to_send.accept = 1;
+                    netSend(net, &packet_to_send);
+
+                    Mix_PlayChannel(-1, sounds->enter, 0);
+                    selectMode(window, renderer, pictures, fonts, in, sounds, music, settings, 1, net, fps);
+                }
+                else
+                {
+                    packet_to_send.accept = 0;
+                    packet_to_send.quit = 1;
+                    netSend(net, &packet_to_send);
+                    SDL_Delay(100); // laisse partir le paquet avant la fermeture
+                }
             }
 
-            SDLNet_TCP_Close(net->client);
-            net->client = NULL;
+            netStop(net); // ferme aussi le socket client
         }
 
         updateEvents(in);
@@ -156,7 +493,8 @@ void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures
         frame_num++;
     }
 
-    SDLNet_TCP_Close(net->server);
+    if(net->server != NULL)
+        SDLNet_TCP_Close(net->server);
 
     transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 0, fps);
 
@@ -176,6 +514,53 @@ void createServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures
 
 
 
+typedef struct
+{
+    int id;
+    char host[MAX_IP_LEN];
+} ConnectJob;
+
+static void startConnect(const char *host)
+{
+    if(connect_mutex == NULL)
+        connect_mutex = SDL_CreateMutex();
+
+    ConnectJob *job = malloc(sizeof(ConnectJob));
+    if(job == NULL)
+        return;
+
+    SDL_LockMutex(connect_mutex);
+    job->id = ++connect_attempt;
+    status = CONNECTING;
+    SDL_UnlockMutex(connect_mutex);
+
+    strncpy(job->host, host, MAX_IP_LEN - 1);
+    job->host[MAX_IP_LEN - 1] = '\0';
+
+    SDL_Thread *thread = SDL_CreateThread(connectingThread, "connectingThread", job);
+    if(thread != NULL)
+        SDL_DetachThread(thread);
+    else
+    {
+        free(job);
+        strcpy(error, "Impossible de lancer la connexion");
+        status = ERROR_NET;
+    }
+}
+
+static void cancelConnect(void)
+{
+    SDL_LockMutex(connect_mutex);
+    connect_attempt++; // la tentative en cours sera ignoree (et son socket ferme) quand elle se terminera
+    if(connect_socket != NULL)
+    {
+        SDLNet_TCP_Close(connect_socket);
+        connect_socket = NULL;
+    }
+    status = USER_FOCUS;
+    SDL_UnlockMutex(connect_mutex);
+}
+
 void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, Fonts *fonts, Input *in, Sounds *sounds, Settings *settings, FPSmanager *fps)
 {
     int escape = 0, frame = 0;
@@ -183,6 +568,8 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
     SDL_Texture *texture[4];
     SDL_Rect pos_dst[4];
     SDL_Color white = {255, 255, 255, 255}, red = {255, 0, 0, 255};
+    texture[3] = NULL;
+    memset(pos_dst, 0, sizeof(pos_dst));
     SDL_Rect pos_fs;
     pos_fs.x = 0;
     pos_fs.y = 0;
@@ -212,6 +599,11 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
     Connect *connect = xmalloc(sizeof(Connect), window);
     connect->ip = xmalloc(sizeof(IPaddress), window);
     connect->net = xmalloc(sizeof(Net), window);
+    netInit(connect->net);
+
+    if(connect_mutex == NULL)
+        connect_mutex = SDL_CreateMutex();
+    status = USER_FOCUS;
 
     strcpy(connect->nickname, settings->nickname);
 
@@ -222,12 +614,16 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
 
         if(in->quit)
             exit(EXIT_SUCCESS);
-        if((status == USER_FOCUS || status == ERROR_NET) && (KEY_ESCAPE))
+        if(KEY_ESCAPE)
         {
             in->key[SDL_SCANCODE_ESCAPE] = 0;
             in->controller[0].buttons[6] = 0;
             in->controller[1].buttons[6] = 0;
-            escape = 1;
+
+            if(status == CONNECTING)
+                cancelConnect(); // un hote injoignable ne bloque plus l'ecran pendant le timeout systeme
+            else
+                escape = 1;
         }
         if((status == USER_FOCUS || status == ERROR_NET) && (in->key[SDL_SCANCODE_RETURN] || in->key[SDL_SCANCODE_KP_ENTER]))
         {
@@ -239,8 +635,7 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
                 if(!isNullIP(str))
                 {
                     strcpy(connect->str, str);
-                    status = CONNECTING;
-                    SDL_CreateThread(connectingThread, "connectingThread", connect);
+                    startConnect(connect->str);
                 }
                 else
                 {
@@ -292,15 +687,32 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
 
         if (status == CONNECTED)
         {
-            Mix_PlayChannel(-1, sounds->enter, 0);
-
-            transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0, fps);
-            waitingForServer(window, renderer, fonts, pictures, in, connect->ip, connect->net, sounds, settings, fps);
-            transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1, fps);
-
-            SDLNet_TCP_Close(connect->net->client);
-
+            SDL_LockMutex(connect_mutex);
+            TCPsocket sock = connect_socket;
+            connect_socket = NULL;
+            *connect->ip = connect_ip;
             status = USER_FOCUS;
+            SDL_UnlockMutex(connect_mutex);
+
+            if(sock != NULL && netStart(connect->net, sock, 0))
+            {
+                Packet hello;
+                netPacketInit(&hello, connect->nickname);
+                netSend(connect->net, &hello);
+
+                Mix_PlayChannel(-1, sounds->enter, 0);
+
+                transition(renderer, pictures->title, 3, texture, pos_dst, ENTERING, 0, fps);
+                waitingForServer(window, renderer, fonts, pictures, in, connect->ip, connect->net, sounds, settings, fps);
+                transition(renderer, pictures->title, 3, texture, pos_dst, EXITING, 1, fps);
+
+                netStop(connect->net);
+            }
+            else
+            {
+                strcpy(error, "Connexion perdue");
+                status = ERROR_NET;
+            }
         }
 
         SDL_RenderClear(renderer);
@@ -334,8 +746,11 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
         SDL_RenderPresent(renderer);
         SDL_framerateDelay(fps);
 
-        if(str[0] != '\0')
-            SDL_DestroyTexture(texture[3]);
+        if(texture[3] != NULL)
+        {
+            SDL_DestroyTexture(texture[3]); // evite aussi une double destruction apres la boucle
+            texture[3] = NULL;
+        }
 
         frame++;
         frame = frame % 60;
@@ -350,7 +765,7 @@ void connectToServer(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictu
         SDL_DestroyTexture(texture[3]);
 
     SDL_StopTextInput();
-    status = USER_FOCUS;
+    cancelConnect();
 
     free(connect->ip);
     free(connect->net);
@@ -496,18 +911,6 @@ void hostOrJoin(SDL_Window *window, SDL_Renderer *renderer, Pictures *pictures, 
 }
 
 
-void sendPos(Net *net, Packet *packet)
-{
-    SDLNet_TCP_Send(net->client, packet, sizeof(Packet));
-}
-
-
-void receivePos(Net *net, Packet *packet)
-{
-    SDLNet_TCP_Recv(net->client, packet, sizeof(Packet));
-}
-
-
 void waitingForServer(SDL_Window *window, SDL_Renderer *renderer, Fonts *fonts, Pictures *pictures, Input *in, IPaddress *ip, Net *net, Sounds *sounds, Settings *settings, FPSmanager *fps)
 {
     int escape = 0, accepted = 0;
@@ -536,9 +939,8 @@ void waitingForServer(SDL_Window *window, SDL_Renderer *renderer, Fonts *fonts, 
         pos_dst[i].y = WINDOW_H / 2 - 80 + i * 80;
     }
 
-    level_num = -1;
-    nickname[0] = '\0';
-    SDL_CreateThread(waitingThread, "waitingThread", net);
+    char host_nickname[NICKNAME_LEN] = "";
+    netResetGame(net);
 
     while(!escape)
     {
@@ -562,14 +964,25 @@ void waitingForServer(SDL_Window *window, SDL_Renderer *renderer, Fonts *fonts, 
             pos_dst[2].x = WINDOW_W / 2 - pos_dst[2].w / 2 + 20;
 
 
-        if(quit)
-            escape = 1;
+        // tout vient du thread de lecture : plus de Recv concurrents ni de variables globales partagees
+        int accept_state = netAcceptState(net);
+        int level_num = netTakeLevel(net);
+
+        SDL_LockMutex(net->mutex);
+        strcpy(host_nickname, net->peer_nickname);
+        SDL_UnlockMutex(net->mutex);
+
+        if(accept_state == 1)
+            accepted = 1;
+
+        if(netPeerQuit(net) || !netIsConnected(net))
+            escape = 1; // l'hote a quitte, a refuse, ou la connexion est tombee
         else if(level_num == 0)
         {
             transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
             playGame(window, renderer, in, pictures, fonts, sounds, settings, 1, ALL_LEVELS, 1, net, fps);
 
-            SDL_CreateThread(waitingThread, "waitingThread", net);
+            netResetGame(net);
             transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
         }
         else if(level_num > 0 && level_num <= NUM_LEVEL)
@@ -577,28 +990,22 @@ void waitingForServer(SDL_Window *window, SDL_Renderer *renderer, Fonts *fonts, 
             transition(renderer, pictures->title, 2, texture, pos_dst, ENTERING, 0, fps);
             playGame(window, renderer, in, pictures, fonts, sounds, settings, level_num, ONE_LEVEL, 1, net, fps);
 
-            SDL_CreateThread(waitingThread, "waitingThread", net);
+            netResetGame(net);
             transition(renderer, pictures->title, 2, texture, pos_dst, EXITING, 1, fps);
         }
 
         SDL_DestroyTexture(texture[0]);
-        sprintf(str, "En attente de l'hôte %d.%d.%d.%d%s%s", a, b, c, d, nickname[0] != '\0' ? " -> " : "", nickname);
+        sprintf(str, "En attente de l'hôte %d.%d.%d.%d%s%s", a, b, c, d, host_nickname[0] != '\0' ? " -> " : "", host_nickname);
         texture[0] = RenderTextBlended(renderer, fonts->ocraext_message, str, white);
         SDL_QueryTexture(texture[0], NULL, NULL, &pos_dst[0].w, &pos_dst[0].h);
         pos_dst[0].x = WINDOW_W / 2 - pos_dst[0].w / 2;
 
-        if(accept_con == 1)
+        if(accepted && accept_state != 0)
         {
             SDL_DestroyTexture(texture[1]);
             texture[1] = RenderTextBlended(renderer, fonts->ocraext_message, "L'hôte a accepté la demande !", green);
             SDL_QueryTexture(texture[1], NULL, NULL, &pos_dst[1].w, &pos_dst[1].h);
             pos_dst[1].x = WINDOW_W / 2 - pos_dst[1].w / 2;
-            accepted = 1;
-        }
-        else if(accept_con == 0 && !accepted)
-        {
-            escape = 1;
-            accept_con = -1;
         }
 
 
@@ -775,64 +1182,46 @@ void getIP(IPaddress *ip, unsigned int *a, unsigned int *b, unsigned int *c, uns
 
 
 
-int waitingThread(void *data)
-{
-    Packet packet;
-    packet.choosing = 0;
-    accept_con = -1;
-    quit = 0;
-    level_num = -1;
-
-    while(!packet.choosing)
-    {
-        SDLNet_TCP_Recv(((Net*) data)->client, &packet, sizeof(Packet));
-        strcpy(nickname, packet.nickname);
-        accept_con = packet.accept;
-
-        SDL_Delay(10);
-    }
-
-    level_num = packet.lvl_num;
-    quit = packet.quit;
-
-    return 0;
-}
-
-
 int connectingThread(void *data)
 {
-    if(SDLNet_ResolveHost(((Connect*) data)->ip, ((Connect*) data)->str, 3000) == 0) // Success
+    ConnectJob *job = (ConnectJob*) data;
+    IPaddress ip;
+    TCPsocket sock = NULL;
+    char message[256] = "";
+
+    if(SDLNet_ResolveHost(&ip, job->host, NET_PORT) == 0)
     {
-        ((Connect*) data)->net->client = SDLNet_TCP_Open(((Connect*) data)->ip);
+        sock = SDLNet_TCP_Open(&ip); // bloquant jusqu'au timeout systeme : d'ou le thread dedie
 
-        if(((Connect*) data)->net->client != NULL)
+        if(sock == NULL)
+            snprintf(message, sizeof(message), "Connexion impossible (%s)", SDLNet_GetError());
+    }
+    else
+        snprintf(message, sizeof(message), "Adresse introuvable (%s)", SDLNet_GetError());
+
+    SDL_LockMutex(connect_mutex);
+
+    if(job->id == connect_attempt) // sinon la tentative a ete annulee entre-temps
+    {
+        if(sock != NULL)
         {
+            connect_socket = sock;
+            connect_ip = ip;
             status = CONNECTED;
-
-            Packet packet;
-            packet.choosing = 0;
-            packet.quit = 0;
-            packet.lvl_num = -1;
-            strcpy(packet.nickname, ((Connect*) data)->nickname);
-            packet.point.x = 0;
-            packet.point.y = 0;
-            packet.frame = 0;
-            packet.state = 0;
-            SDLNet_TCP_Send(((Connect*) data)->net->client, &packet, sizeof(Packet));
         }
         else
         {
-            strcpy(error, SDLNet_GetError());
+            strncpy(error, message, sizeof(error) - 1);
+            error[sizeof(error) - 1] = '\0';
             status = ERROR_NET;
         }
     }
-    else
-    {
-        strcpy(error, SDLNet_GetError());
-        status = ERROR_NET;
-    }
+    else if(sock != NULL)
+        SDLNet_TCP_Close(sock);
 
+    SDL_UnlockMutex(connect_mutex);
+
+    free(job);
 
     return 0;
 }
-

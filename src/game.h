@@ -188,7 +188,6 @@
     void displayOtherPlayer(SDL_Renderer *renderer, Lvl *lvl, Player *player, Packet packet, Fonts *fonts);
     void setLabel(SDL_Renderer *renderer, Fonts *fonts, Lvl *lvl, Player *player, int player_num, char *str);
     void displayLabel(SDL_Renderer *renderer, Player *player);
-    int receive_thread(void *data);
     void teleport(Lvl *lvl, Player *player, int x, int y);
     int getOffsetX(const int x, const int w, SDL_Rect *pos_dst);
     int getOffsetY(const int y, const int h, SDL_Rect *pos_dst, int num_players, int player_num);

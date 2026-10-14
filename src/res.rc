@@ -16,8 +16,6 @@ BEGIN
             VALUE "FileDescription",  DESCRIPTION_STR
             VALUE "FileVersion",      VERSION_STR
             VALUE "InternalName",     "Kaaris vs Booba\0"
-            VALUE "LegalCopyright",   "Copyright © 2019. All rights reserved.\0"
-            VALUE "LegalTrademarks",  "Kaaris vs Booba is a registered trademark of David Gazi.\0"
             VALUE "OriginalFilename", "Kaaris vs Booba.exe\0"
             VALUE "ProductName",      "Kaaris vs Booba\0"
             VALUE "ProductVersion",   VERSION_STR

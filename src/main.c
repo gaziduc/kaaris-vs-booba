@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
     texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
-    sprintf(str, "David Gazi - Version %s (64 bits) - 2019", VERSION_STR);
+    sprintf(str, "David Gazi - Version %s (64 bits)", VERSION_STR);
     texture[VERSION] = RenderTextBlended(renderer, fonts->ocraext_version, str, white);
     texture[INFO] = RenderTextBlended(renderer, fonts->ocraext_version, "Editeur de niveau : F8", white);
 

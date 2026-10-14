@@ -1,6 +1,6 @@
 /*
   SDL_net:  An example cross-platform network library for use with SDL
-  Copyright (C) 1997-2022 Sam Lantinga <slouken@libsdl.org>
+  Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>
   Copyright (C) 2012 Simeon Maxein <smaxein@googlemail.com>
 
   This software is provided 'as-is', without any express or implied
@@ -55,7 +55,7 @@ extern "C" {
 /* Printable format: "%d.%d.%d", MAJOR, MINOR, PATCHLEVEL
 */
 #define SDL_NET_MAJOR_VERSION   2
-#define SDL_NET_MINOR_VERSION   2
+#define SDL_NET_MINOR_VERSION   4
 #define SDL_NET_PATCHLEVEL      0
 
 /* This macro can be used to fill a version structure with the compile-time
@@ -69,21 +69,22 @@ extern "C" {
 }
 
 #if SDL_NET_MAJOR_VERSION < 3 && SDL_MAJOR_VERSION < 3
+
 /**
- *  This is the version number macro for the current SDL_net version.
+ * This is the version number macro for the current SDL_net version.
  *
- *  In versions higher than 2.9.0, the minor version overflows into
- *  the thousands digit: for example, 2.23.0 is encoded as 4300.
- *  This macro will not be available in SDL 3.x or SDL_net 3.x.
+ * In versions higher than 2.9.0, the minor version overflows into the
+ * thousands digit: for example, 2.23.0 is encoded as 4300. This macro will
+ * not be available in SDL 3.x or SDL_net 3.x.
  *
- *  Deprecated, use SDL_NET_VERSION_ATLEAST or SDL_NET_VERSION instead.
+ * Deprecated, use SDL_NET_VERSION_ATLEAST or SDL_NET_VERSION instead.
  */
 #define SDL_NET_COMPILEDVERSION \
     SDL_VERSIONNUM(SDL_NET_MAJOR_VERSION, SDL_NET_MINOR_VERSION, SDL_NET_PATCHLEVEL)
 #endif /* SDL_NET_MAJOR_VERSION < 3 && SDL_MAJOR_VERSION < 3 */
 
 /**
- *  This macro will evaluate to true if compiled with SDL_net at least X.Y.Z.
+ * This macro will evaluate to true if compiled with SDL_net at least X.Y.Z.
  */
 #define SDL_NET_VERSION_ATLEAST(X, Y, Z) \
     ((SDL_NET_MAJOR_VERSION >= X) && \
@@ -169,7 +170,7 @@ typedef struct {
  * will be INADDR_NONE, and the function will return -1.
  *
  * \param address to be filled in with the resolved address and port.
- * \param host the hostname to lookup (like "libsdl.org")
+ * \param host the hostname to lookup (like "libsdl.org").
  * \param port the port intended to be connected to, to fill into address.
  * \returns zero on success, -1 on error.
  *
@@ -195,8 +196,8 @@ extern DECLSPEC const char * SDLCALL SDLNet_ResolveIP(const IPaddress *ip);
  * Get the addresses of network interfaces on this system.
  *
  * \param addresses where to store the returned information.
- * \param maxcount the number of results that can be stored at `addresses`
- * \returns the number of addresses saved in `addresses`
+ * \param maxcount the number of results that can be stored at `addresses`.
+ * \returns the number of addresses saved in `addresses`.
  *
  * \since This function is available since SDL_net 2.0.0.
  */
@@ -206,6 +207,43 @@ extern DECLSPEC int SDLCALL SDLNet_GetLocalAddresses(IPaddress *addresses, int m
 /* TCP network API */
 
 typedef struct _TCPsocket *TCPsocket;
+
+/**
+ * Open a server TCP network socket.
+ *
+ * If `ip->host` is INADDR_NONE or INADDR_ANY, the socket is bound to all
+ * interfaces, otherwise it is bound to the specified interface. The address
+ * passed in should already be swapped to network byte order (addresses
+ * returned from SDLNet_ResolveHost() are already in the correct form).
+ *
+ * \param ip The address to host a server on.
+ * \returns the newly created socket, or NULL if there was an error.
+ *
+ * \since This function is available since SDL_net 2.4.0.
+ *
+ * \sa SDLNet_TCP_Close
+ * \sa SDLNet_TCP_OpenClient
+ * \sa SDLNet_TCP_Open
+ */
+extern DECLSPEC TCPsocket SDLCALL SDLNet_TCP_OpenServer(IPaddress *ip);
+
+/**
+ * Open a client TCP network socket.
+ *
+ * Attempt a TCP connection to the remote host and port. The address passed in
+ * should already be swapped to network byte order (addresses returned from
+ * SDLNet_ResolveHost() are already in the correct form).
+ *
+ * \param ip The address to open a connection to.
+ * \returns the newly created socket, or NULL if there was an error.
+ *
+ * \since This function is available since SDL_net 2.4.0.
+ *
+ * \sa SDLNet_TCP_Close
+ * \sa SDLNet_TCP_OpenServer
+ * \sa SDLNet_TCP_Open
+ */
+extern DECLSPEC TCPsocket SDLCALL SDLNet_TCP_OpenClient(IPaddress *ip);
 
 /**
  * Open a TCP network socket.
@@ -222,6 +260,8 @@ typedef struct _TCPsocket *TCPsocket;
  * \since This function is available since SDL_net 2.0.0.
  *
  * \sa SDLNet_TCP_Close
+ * \sa SDLNet_TCP_OpenServer
+ * \sa SDLNet_TCP_OpenClient
  */
 extern DECLSPEC TCPsocket SDLCALL SDLNet_TCP_Open(IPaddress *ip);
 
@@ -556,7 +596,7 @@ extern DECLSPEC void SDLCALL SDLNet_UDP_Unbind(UDPsocket sock, int channel);
  *
  * \param sock the UDP socket to unbind addresses from a channel on.
  * \param channel the channel of the socket to unbind.
- * \returns the address bound to the socket's channel, or
+ * \returns the address bound to the socket's channel, or.
  *
  * \since This function is available since SDL_net 2.0.0.
  */
@@ -566,7 +606,7 @@ extern DECLSPEC IPaddress * SDLCALL SDLNet_UDP_GetPeerAddress(UDPsocket sock, in
  * Send a vector of packets to the the channels specified within the packet.
  *
  * If the channel specified in the packet is -1, the packet will be sent to
- * the address in the `src` member of the packet.
+ * the address in the `address` member of the packet.
  *
  * Each packet will be updated with the status of the packet after it has been
  * sent, -1 if the packet send failed.
@@ -598,7 +638,7 @@ extern DECLSPEC IPaddress * SDLCALL SDLNet_UDP_GetPeerAddress(UDPsocket sock, in
  *
  * \since This function is available since SDL_net 2.0.0.
  *
- * \sa SDLNet_UDP_RecV
+ * \sa SDLNet_UDP_RecvV
  */
 extern DECLSPEC int SDLCALL SDLNet_UDP_SendV(UDPsocket sock, UDPpacket **packets, int npackets);
 
@@ -606,7 +646,7 @@ extern DECLSPEC int SDLCALL SDLNet_UDP_SendV(UDPsocket sock, UDPpacket **packets
  * Send a single UDP packet to the specified channel.
  *
  * If the channel specified is -1, the packet will be sent to the address in
- * the `src` member of the packet.
+ * the `address` member of the packet.
  *
  * The packet will be updated with the status of the packet after it has been
  * sent.
@@ -639,8 +679,8 @@ extern DECLSPEC int SDLCALL SDLNet_UDP_Send(UDPsocket sock, int channel, UDPpack
  * Receive a vector of pending packets from a UDP socket.
  *
  * The returned packets contain the source address and the channel they
- * arrived on. If they did not arrive on a bound channel, the the channel will
- * be set to -1.
+ * arrived on. If they did not arrive on a bound channel, then the channel
+ * will be set to -1.
  *
  * The channels are checked in highest to lowest order, so if an address is
  * bound to multiple channels, the highest channel with the source address
@@ -671,8 +711,8 @@ extern DECLSPEC int SDLCALL SDLNet_UDP_RecvV(UDPsocket sock, UDPpacket **packets
  * Receive a single packet from a UDP socket.
  *
  * The returned packets contain the source address and the channel they
- * arrived on. If they did not arrive on a bound channel, the the channel will
- * be set to -1.
+ * arrived on. If they did not arrive on a bound channel, then the channel
+ * will be set to -1.
  *
  * The channels are checked in highest to lowest order, so if an address is
  * bound to multiple channels, the highest channel with the source address
@@ -771,13 +811,13 @@ extern DECLSPEC int SDLCALL SDLNet_AddSocket(SDLNet_SocketSet set, SDLNet_Generi
 /**
  * Add a TCP socket to a socket set, to be checked for available data.
  *
- * This is a small TCP-specific wrapper over SDLNet_AddSocket; please refer
- * to that function's documentation.
+ * This is a small TCP-specific wrapper over SDLNet_AddSocket; please refer to
+ * that function's documentation.
  *
  * \param set the socket set to add a new socket to.
  * \param sock the socket to add to the set.
- * \returns the total number of sockets contained in the set (including this new one),
- *          or -1 if the set is already full.
+ * \returns the total number of sockets contained in the set (including this
+ *          new one), or -1 if the set is already full.
  *
  * \since This function is available since SDL_net 2.0.0.
  *
@@ -791,13 +831,13 @@ SDL_FORCE_INLINE int SDLNet_TCP_AddSocket(SDLNet_SocketSet set, TCPsocket sock)
 /**
  * Add a UDP socket to a socket set, to be checked for available data.
  *
- * This is a small UDP-specific wrapper over SDLNet_AddSocket; please refer
- * to that function's documentation.
+ * This is a small UDP-specific wrapper over SDLNet_AddSocket; please refer to
+ * that function's documentation.
  *
  * \param set the socket set to add a new socket to.
  * \param sock the socket to add to the set.
- * \returns the total number of sockets contained in the set (including this new one),
- *          or -1 if the set is already full.
+ * \returns the total number of sockets contained in the set (including this
+ *          new one), or -1 if the set is already full.
  *
  * \since This function is available since SDL_net 2.0.0.
  *
@@ -841,13 +881,13 @@ extern DECLSPEC int SDLCALL SDLNet_DelSocket(SDLNet_SocketSet set, SDLNet_Generi
 /**
  * Remove a TCP socket from a socket set.
  *
- * This is a small TCP-specific wrapper over SDLNet_DelSocket; please refer
- * to that function's documentation.
+ * This is a small TCP-specific wrapper over SDLNet_DelSocket; please refer to
+ * that function's documentation.
  *
  * \param set the socket set to remove a socket from.
  * \param sock the socket to remove from the set.
- * \returns the total number of sockets contained in the set (after
- *          `sock`'s removal), or -1 if `sock` was not in the set.
+ * \returns the total number of sockets contained in the set (after `sock`'s
+ *          removal), or -1 if `sock` was not in the set.
  *
  * \since This function is available since SDL_net 2.0.0.
  *
@@ -861,13 +901,13 @@ SDL_FORCE_INLINE int SDLNet_TCP_DelSocket(SDLNet_SocketSet set, TCPsocket sock)
 /**
  * Remove a UDP socket from a socket set.
  *
- * This is a small UDP-specific wrapper over SDLNet_DelSocket; please refer
- * to that function's documentation.
+ * This is a small UDP-specific wrapper over SDLNet_DelSocket; please refer to
+ * that function's documentation.
  *
  * \param set the socket set to remove a socket from.
  * \param sock the socket to remove from the set.
- * \returns the total number of sockets contained in the set (after
- *          `sock`'s removal), or -1 if `sock` was not in the set.
+ * \returns the total number of sockets contained in the set (after `sock`'s
+ *          removal), or -1 if `sock` was not in the set.
  *
  * \since This function is available since SDL_net 2.0.0.
  *
@@ -898,12 +938,12 @@ SDL_FORCE_INLINE int SDLNet_UDP_DelSocket(SDLNet_SocketSet set, UDPsocket sock)
 extern DECLSPEC int SDLCALL SDLNet_CheckSockets(SDLNet_SocketSet set, Uint32 timeout);
 
 /* !!! FIXME: wikiheaders.pl ignores macros, atm */
+
 /**
  * See if a specific socket has data available after checking it in a set.
  *
- * After calling SDLNet_CheckSockets(), you can use this function on a
- * socket that was in the socket set, to find out if data is available
- * for reading.
+ * After calling SDLNet_CheckSockets(), you can use this function on a socket
+ * that was in the socket set, to find out if data is available for reading.
  *
  * \param sock the socket to check.
  * \returns non-zero if socket has new data available, zero otherwise.
