@@ -696,4 +696,139 @@ cleanup:
     return rv;
 }
 
-#endif // !__EMSCRIPTEN__
+#else /* __EMSCRIPTEN__ */
+
+/*
+ * Version web : FFmpeg n'est pas disponible, on laisse le navigateur decoder la video avec un element
+ * HTML5 <video> place par-dessus le canvas. Le fichier est lu depuis le systeme de fichiers virtuel
+ * Emscripten (--preload-file data) s'il y est, sinon charge par URL a cote de la page.
+ *
+ * Necessite -sASYNCIFY (ou equivalent) : la boucle d'attente cede la main au navigateur avec
+ * emscripten_sleep().
+ */
+
+#include <emscripten.h>
+#include <SDL2/SDL.h>
+#include "event.h"
+#include "video.h"
+#include "game.h"
+
+/* Renvoie 1 si la video a ete lancee. Etats : 0 en cours, 1 terminee, 2 erreur, 3 passee par clic/toucher */
+EM_JS(int, web_video_start, (const char *path), {
+    try {
+        var p = UTF8ToString(path);
+        var v = document.createElement('video');
+        var src = p;
+
+        try {
+            var data = FS.readFile(p);
+            var type = p.toLowerCase().endsWith('.webm') ? 'video/webm' : 'video/mp4';
+            src = URL.createObjectURL(new Blob([data], {type: type}));
+        } catch (e) { /* pas dans le FS virtuel : on tente l'URL directe */ }
+
+        v.playsInline = true;
+        v.setAttribute('playsinline', '');
+        // l'element est cale sur le canvas du jeu (et suit ses changements de taille / plein ecran)
+        var canvas = Module['canvas'] || document.getElementById('canvas');
+        function place() {
+            var r = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+            v.style.cssText = 'position:fixed;left:' + r.left + 'px;top:' + r.top + 'px;width:' + r.width + 'px;height:' + r.height +
+                              'px;object-fit:contain;background:#000;z-index:2147483646;';
+            hint.style.left = r.left + 'px'; hint.style.width = r.width + 'px';
+            hint.style.top = (r.top + r.height - 44) + 'px'; hint.style.bottom = 'auto';
+        }
+
+        var hint = document.createElement('div');
+        hint.textContent = 'Appuyez sur ENTREE pour passer...';
+        hint.style.cssText = 'position:fixed;left:0;right:0;bottom:20px;text-align:center;color:#fff;font:20px monospace;' +
+                             'z-index:2147483647;pointer-events:none;animation:kvbblink 1.6s ease-in-out infinite alternate;';
+        hint.style.position = 'fixed';
+        var style = document.createElement('style');
+        style.textContent = '@keyframes kvbblink{from{opacity:0}to{opacity:1}}';
+
+        var st = { el: v, hint: hint, style: style, state: 0, src: src, blob: (src !== p), place: place,
+                   unmute: function () { v.muted = false; } };
+        Module.kvbVideo = st;
+
+        v.onended = function () { st.state = 1; };
+        v.onerror = function () { st.state = 2; };
+        v.onclick = function () { st.state = 3; };
+        v.ontouchend = function () { st.state = 3; };
+        v.src = src;
+
+        document.head.appendChild(style);
+        document.body.appendChild(v);
+        document.body.appendChild(hint);
+        place();
+        window.addEventListener('resize', place);
+        document.addEventListener('fullscreenchange', place);
+
+        // Les navigateurs bloquent souvent l'autoplay avec son : on retente en muet, puis on remet le
+        // son des la premiere interaction (touche ou clic).
+        var pr = v.play();
+        if (pr && pr.catch) {
+            pr.catch(function () {
+                v.muted = true;
+                v.play().catch(function () { st.state = 2; });
+                window.addEventListener('keydown', st.unmute, { once: true });
+                window.addEventListener('pointerdown', st.unmute, { once: true });
+            });
+        }
+        return 1;
+    } catch (e) {
+        console.error('Lecture video impossible :', e);
+        return 0;
+    }
+});
+
+EM_JS(int, web_video_state, (), {
+    return Module.kvbVideo ? Module.kvbVideo.state : 2;
+});
+
+EM_JS(void, web_video_stop, (), {
+    var st = Module.kvbVideo;
+    if (!st) return;
+    try { st.el.pause(); } catch (e) {}
+    window.removeEventListener('resize', st.place);
+    document.removeEventListener('fullscreenchange', st.place);
+    window.removeEventListener('keydown', st.unmute);
+    window.removeEventListener('pointerdown', st.unmute);
+    st.el.remove();
+    st.hint.remove();
+    st.style.remove();
+    if (st.blob) URL.revokeObjectURL(st.src);
+    Module.kvbVideo = null;
+});
+
+int playVideo(SDL_Window *window, SDL_Renderer *renderer, Input *in, Fonts *fonts, char *filename)
+{
+    if(!web_video_start(filename))
+        return -1;
+
+    while(web_video_state() == 0)
+    {
+        updateEvents(in);
+
+        if(in->quit)
+            break;
+
+        if(KEY_ESCAPE || KEY_ENTER_MENU)
+        {
+            in->key[SDL_SCANCODE_SPACE] = 0;
+            in->key[SDL_SCANCODE_RETURN] = 0;
+            in->key[SDL_SCANCODE_KP_ENTER] = 0;
+            in->controller->buttons[0] = 0;
+            in->key[SDL_SCANCODE_ESCAPE] = 0;
+            in->controller->buttons[6] = 0;
+            break;
+        }
+
+        emscripten_sleep(16);
+    }
+
+    web_video_stop();
+
+    return 0;
+}
+
+#endif // __EMSCRIPTEN__

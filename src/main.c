@@ -55,11 +55,14 @@ int main(int argc, char *argv[])
 
     srand(time(NULL));
 
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_JOYSTICK | SDL_INIT_HAPTIC) < 0)
+    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER | SDL_INIT_JOYSTICK) < 0)
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not initialize SDL2", SDL_GetError(), NULL);
         exit(EXIT_FAILURE);
     }
+
+    /* Le retour de force est optionnel (absent de la version web) : on ignore l'echec */
+    SDL_InitSubSystem(SDL_INIT_HAPTIC);
 
     window = SDL_CreateWindow(DESCRIPTION_STR, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_W, WINDOW_H, SDL_WINDOW_SHOWN);
     if(window == NULL)
@@ -130,9 +133,7 @@ int main(int argc, char *argv[])
     SDL_initFramerate(fps);
     SDL_setFramerate(fps, 30);
 
-    #ifndef __EMSCRIPTEN__
-        playVideo(window, renderer, in, fonts, "data/videos/intro.mp4");
-    #endif // !__EMSCRIPTEN__
+    playVideo(window, renderer, in, fonts, "data/videos/intro.mp4"); // FFmpeg en natif, element <video> en web
 
     intro(window, renderer, in, pictures, fonts, sounds, fps);
 
@@ -150,7 +151,7 @@ int main(int argc, char *argv[])
     texture[OPTIONS] = RenderTextBlended(renderer, fonts->ocraext_message, "Options", white);
     texture[QUIT] = RenderTextBlended(renderer, fonts->ocraext_message, "Quitter", white);
 
-    sprintf(str, "David Gazi - Version %s (64 bits)", VERSION_STR);
+    sprintf(str, "David Gazi - Version %s (64 bits) - 2019", VERSION_STR);
     texture[VERSION] = RenderTextBlended(renderer, fonts->ocraext_version, str, white);
     texture[INFO] = RenderTextBlended(renderer, fonts->ocraext_version, "Editeur de niveau : F8", white);
 

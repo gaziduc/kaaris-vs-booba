@@ -146,7 +146,8 @@ void fxBurst(float x, float y, int n, int r, int g, int b)
     for(int i = 0; i < n; i++)
     {
         float a = frand(0, 6.2832f), s = frand(1.5f, 6.0f);
-        Particle *p = add(P_DOT, x, y, cosf(a) * s, sinf(a) * s - 1.0f, (int) frand(18, 40), frand(2.0f, 4.5f), r, g + (int) frand(0, 80) > 255 ? 255 : g + (int) frand(0, 80), b);
+        int gg = g + (int) frand(0, 80);
+        Particle *p = add(P_DOT, x, y, cosf(a) * s, sinf(a) * s - 1.0f, (int) frand(18, 40), frand(2.0f, 4.5f), r, gg > 255 ? 255 : gg, b);
         if(p) { p->grav = 0.22f; p->drag = 0.96f; p->grow = -0.05f; }
     }
 
@@ -302,16 +303,40 @@ void fxShadow(SDL_Renderer *renderer, Lvl *lvl, Player *pl, int view, int num_pl
     if(tx < 0 || tx >= lvl->width)
         return;
 
+    int feet_x = pl->pos.x + PLAYER_W / 2;
+
     for(int k = 0; k < 8 && ty + k < lvl->height; k++)
     {
-        if(ty + k >= 0 && lvl->solid[(int) lvl->map[tx][ty + k]])
+        if(ty + k < 0)
+            continue;
+
+        int tile = (int) lvl->map[tx][ty + k];
+        int is_slope = tile >= TILE_PENTE_BenH_1 && tile <= TILE_PENTE_HenB_2;
+
+        if(is_slope || lvl->solid[tile])
         {
             int ground = (ty + k) * TILE_SIZE;
+
+            if(is_slope)
+            {
+                /* Sur une pente, le sol n'est pas en haut de la tuile : on suit la surface inclinee */
+                double a, b;
+                if(slopeEquation(tile, &a, &b))
+                {
+                    int yPos = (int) (a * (feet_x - tx * TILE_SIZE) + b);
+                    if(yPos < 0) yPos = 0;
+                    if(yPos > TILE_SIZE) yPos = TILE_SIZE;
+                    ground = (ty + k + 1) * TILE_SIZE - yPos;
+                }
+            }
+
             int dist = ground - (pl->pos.y + PLAYER_H);
+            if(dist < 0 && dist >= -6)  /* petit ecart d'arrondi : on colle l'ombre au sol */
+                dist = 0;
             if(dist < 0 || dist > 200)
                 return;
 
-            int sx = pl->pos.x + PLAYER_W / 2 - lvl->startX[view];
+            int sx = feet_x - lvl->startX[view];
             int sy = ground - lvl->startY[view] + (int) (WINDOW_H / num_players) * view;
             int w = 13 - dist / 22;
             if(w < 4) w = 4;
